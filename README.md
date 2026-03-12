@@ -75,9 +75,22 @@ curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations/<conversati
 ## Baileys notes
 
 - Enable Baileys with `ENABLE_BAILEYS=true`.
+- Set `BAILEYS_DASHBOARD_AUTH_TOKEN` to protect the QR dashboard.
 - On boot, the runtime loads active `provider_connections` with `provider=baileys`.
 - Session auth files are stored under `BAILEYS_AUTH_DIR/<connectionKey>`.
 - QR values are logged by the provider runtime when a new session needs pairing.
+- Web login/QR dashboard:
+
+```text
+http://localhost:3000/auth/baileys?auth=<BAILEYS_DASHBOARD_AUTH_TOKEN>
+```
+
+- Optional filters:
+
+```text
+http://localhost:3000/auth/baileys?auth=<token>&tenantId=tenant_demo
+http://localhost:3000/auth/baileys?auth=<token>&connectionKey=demo-baileys-session
+```
 
 ## Testing
 

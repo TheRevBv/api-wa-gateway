@@ -1,4 +1,8 @@
 import type {
+  BaileysSessionSnapshot,
+  BaileysSessionViewService
+} from "../../src/application/ports/baileys-session-view";
+import type {
   ContactRepository,
   ConversationRepository,
   MessageRepository,
@@ -361,6 +365,29 @@ export class FakeWhatsAppProviderRegistry implements WhatsAppProviderRegistry {
 
   get() {
     return this.provider;
+  }
+}
+
+export class FakeBaileysSessionViewService implements BaileysSessionViewService {
+  enabled = true;
+  sessions: BaileysSessionSnapshot[] = [];
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  async listSessions(filters?: { tenantId?: string; connectionKey?: string }): Promise<BaileysSessionSnapshot[]> {
+    return this.sessions.filter((session) => {
+      if (filters?.tenantId && session.tenantId !== filters.tenantId) {
+        return false;
+      }
+
+      if (filters?.connectionKey && session.connectionKey !== filters.connectionKey) {
+        return false;
+      }
+
+      return true;
+    });
   }
 }
 

@@ -12,7 +12,8 @@ const environmentSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
-  BAILEYS_AUTH_DIR: z.string().default(".baileys-auth")
+  BAILEYS_AUTH_DIR: z.string().default(".baileys-auth"),
+  BAILEYS_DASHBOARD_AUTH_TOKEN: z.string().default("")
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

@@ -6,6 +6,7 @@ import { ListConversationMessagesUseCase } from "../application/use-cases/list-c
 import { ListConversationsUseCase } from "../application/use-cases/list-conversations";
 import { ReceiveInboundMessageUseCase } from "../application/use-cases/receive-inbound-message";
 import { SendOutboundMessageUseCase } from "../application/use-cases/send-outbound-message";
+import type { BaileysSessionViewService } from "../application/ports/baileys-session-view";
 import type { ProviderRuntime } from "../application/ports/whatsapp-provider";
 import type { Environment } from "../config/env";
 import { createDatabaseConnection } from "./database/client";
@@ -28,6 +29,8 @@ export interface RuntimeServices {
   listConversations: ListConversationsUseCase;
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
+  baileysSessionView: BaileysSessionViewService;
+  baileysDashboardAuthToken: string;
 }
 
 export interface RuntimeContext {
@@ -74,7 +77,9 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
       sendOutboundMessage: new SendOutboundMessageUseCase(repositories, providerRegistry),
       listConversations: new ListConversationsUseCase(repositories),
       getConversation: new GetConversationUseCase(repositories),
-      listConversationMessages: new ListConversationMessagesUseCase(repositories)
+      listConversationMessages: new ListConversationMessagesUseCase(repositories),
+      baileysSessionView: baileysProvider,
+      baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN
     },
     providerRuntimes: [baileysProvider],
     close: async () => {

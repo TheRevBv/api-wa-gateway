@@ -1,10 +1,15 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { Logger } from "pino";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 
 import { ApplicationError } from "../../application/errors/application-error";
+import type {
+  BaileysSessionSnapshot,
+  BaileysSessionStatus,
+  BaileysSessionViewService
+} from "../../application/ports/baileys-session-view";
 import type { ProviderConnectionRepository } from "../../application/ports/repositories";
 import type {
   ProviderRuntime,
@@ -17,15 +22,116 @@ import type { ProviderConnection } from "../../domain/providers/provider-connect
 
 type BaileysModule = typeof import("@whiskeysockets/baileys");
 
+const VERIFIED_BAILEYS_VERSION: [number, number, number] = [2, 3000, 1033846690];
+
 interface SocketHandle {
   socket: WASocket;
   connection: ProviderConnection;
+}
+
+interface SessionState {
+  connection: ProviderConnection;
+  status: BaileysSessionStatus;
+  qrCode: string | null;
+  lastError: string | null;
+  updatedAt: Date;
 }
 
 const dynamicImport = new Function(
   "modulePath",
   "return import(modulePath);"
 ) as (modulePath: string) => Promise<BaileysModule>;
+
+const extractErrorMessage = (error: unknown): string | null => {
+  if (!error) {
+    return null;
+  }
+
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const value = error as {
+      message?: unknown;
+      output?: {
+        payload?: {
+          message?: unknown;
+        };
+        statusCode?: unknown;
+      };
+      data?: unknown;
+    };
+
+    if (typeof value.output?.payload?.message === "string" && value.output.payload.message.length > 0) {
+      return value.output.payload.message;
+    }
+
+    if (typeof value.message === "string" && value.message.length > 0) {
+      return value.message;
+    }
+  }
+
+  return String(error);
+};
+
+const extractDisconnectStatusCode = (error: unknown): number | null => {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  const value = error as {
+    output?: {
+      statusCode?: unknown;
+    };
+    data?: {
+      statusCode?: unknown;
+    };
+  };
+
+  if (typeof value.output?.statusCode === "number") {
+    return value.output.statusCode;
+  }
+
+  if (typeof value.data?.statusCode === "number") {
+    return value.data.statusCode;
+  }
+
+  return null;
+};
+
+const describeDisconnectReason = (statusCode: number | null): string | null => {
+  switch (statusCode) {
+    case 401:
+      return "Sesion cerrada. Se requiere un nuevo QR.";
+    case 403:
+      return "WhatsApp rechazo la conexion.";
+    case 408:
+      return "La conexion con WhatsApp expiro o se perdio.";
+    case 411:
+      return "La cuenta no tiene multi-dispositivo habilitado.";
+    case 428:
+      return "La conexion fue cerrada antes de completarse.";
+    case 440:
+      return "La sesion fue reemplazada por otra conexion.";
+    case 500:
+      return "La sesion guardada es invalida.";
+    case 503:
+      return "WhatsApp no estuvo disponible temporalmente.";
+    case 515:
+      return "WhatsApp pidio reiniciar la sesion.";
+    default:
+      return null;
+  }
+};
+
+const mergeErrorDetails = (reason: string | null, message: string | null): string | null => {
+  if (reason && message && reason !== message) {
+    return `${reason} ${message}`;
+  }
+
+  return reason ?? message;
+};
 
 const normalizePhone = (value: string): string => value.replace(/[^\d]/g, "");
 
@@ -134,11 +240,20 @@ export interface BaileysWhatsAppProviderOptions {
   authDir: string;
 }
 
-export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntime {
+export class BaileysWhatsAppProvider
+  implements WhatsAppProvider, ProviderRuntime, BaileysSessionViewService
+{
   readonly providerName = "baileys" as const;
 
   private readonly sockets = new Map<string, SocketHandle>();
   private readonly pendingSockets = new Map<string, Promise<SocketHandle>>();
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly sessionStates = new Map<string, SessionState>();
+  private stopped = false;
+
+  isEnabled(): boolean {
+    return this.options.enabled;
+  }
 
   constructor(
     private readonly connectionRepository: ProviderConnectionRepository,
@@ -153,11 +268,44 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
       return;
     }
 
+    this.stopped = false;
     const connections = await this.connectionRepository.listActiveByProvider("baileys");
-    await Promise.all(connections.map((connection) => this.ensureSocket(connection)));
+    connections.forEach((connection) => this.upsertSessionState(connection, "connecting"));
+    await Promise.all(
+      connections.map(async (connection) => {
+        try {
+          await this.ensureSocket(connection);
+        } catch (error) {
+          this.updateSessionState(connection.id, {
+            status: "error",
+            lastError: mergeErrorDetails(
+              "No se pudo iniciar la sesion Baileys.",
+              extractErrorMessage(error)
+            )
+          });
+          this.logger.error(
+            {
+              error,
+              tenantId: connection.tenantId,
+              connectionKey: connection.connectionKey
+            },
+            "Failed to bootstrap Baileys session"
+          );
+          this.scheduleReconnect(connection, 5_000);
+        }
+      })
+    );
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.reconnectTimers.clear();
+
     for (const handle of this.sockets.values()) {
       const socketWithClose = handle.socket as unknown as { end?: () => void; ws?: { close?: () => void } };
       socketWithClose.end?.();
@@ -166,6 +314,41 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
 
     this.sockets.clear();
     this.pendingSockets.clear();
+  }
+
+  async listSessions(filters?: { tenantId?: string; connectionKey?: string }): Promise<BaileysSessionSnapshot[]> {
+    const connections = await this.connectionRepository.listActiveByProvider("baileys");
+
+    connections.forEach((connection) => {
+      if (!this.sessionStates.has(connection.id)) {
+        this.upsertSessionState(connection, this.options.enabled ? "connecting" : "disabled");
+      }
+    });
+
+    return connections
+      .map((connection) => this.sessionStates.get(connection.id))
+      .filter((state): state is SessionState => Boolean(state))
+      .filter((state) => {
+        if (filters?.tenantId && state.connection.tenantId !== filters.tenantId) {
+          return false;
+        }
+
+        if (filters?.connectionKey && state.connection.connectionKey !== filters.connectionKey) {
+          return false;
+        }
+
+        return true;
+      })
+      .map((state) => ({
+        connectionId: state.connection.id,
+        tenantId: state.connection.tenantId,
+        connectionKey: state.connection.connectionKey,
+        displayName: state.connection.displayName,
+        status: state.status,
+        qrCode: state.qrCode,
+        lastError: state.lastError,
+        updatedAt: state.updatedAt
+      }));
   }
 
   async sendMessage(command: ProviderSendMessageCommand): Promise<ProviderSendMessageResult> {
@@ -224,6 +407,7 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
       return pendingSocket;
     }
 
+    this.upsertSessionState(connection, "connecting");
     const socketPromise = this.createSocket(connection);
     this.pendingSockets.set(connection.id, socketPromise);
 
@@ -237,21 +421,69 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
   }
 
   private async createSocket(connection: ProviderConnection): Promise<SocketHandle> {
-    await mkdir(path.join(this.options.authDir, connection.connectionKey), { recursive: true });
+    const authPath = path.join(this.options.authDir, connection.connectionKey);
+    await mkdir(authPath, { recursive: true });
 
     const baileys = await dynamicImport("@whiskeysockets/baileys");
-    const { default: makeWASocket, fetchLatestBaileysVersion, useMultiFileAuthState } = baileys;
-    const authState = await useMultiFileAuthState(path.join(this.options.authDir, connection.connectionKey));
-    const versionInfo = await fetchLatestBaileysVersion();
+    const makeWASocket =
+      typeof baileys.makeWASocket === "function"
+        ? baileys.makeWASocket
+        : typeof baileys.default === "function"
+          ? baileys.default
+          : null;
+    const {
+      Browsers,
+      DisconnectReason,
+      fetchLatestBaileysVersion,
+      useMultiFileAuthState
+    } = baileys;
+
+    if (!makeWASocket) {
+      throw new Error("Baileys socket factory is not available");
+    }
+
+    const authState = await useMultiFileAuthState(authPath);
+    let version = VERIFIED_BAILEYS_VERSION;
+
+    try {
+      const versionInfo = await fetchLatestBaileysVersion();
+      version = versionInfo.version as [number, number, number];
+    } catch (error) {
+      this.logger.warn(
+        {
+          error,
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey,
+          fallbackVersion: VERIFIED_BAILEYS_VERSION.join(".")
+        },
+        "Failed to resolve latest Baileys web version; using verified fallback"
+      );
+    }
 
     const socket = makeWASocket({
       auth: authState.state,
-      version: versionInfo.version
+      version,
+      browser: Browsers.ubuntu("api-wa-gateway"),
+      printQRInTerminal: false,
+      markOnlineOnConnect: false
     });
 
     socket.ev.on("creds.update", authState.saveCreds);
     socket.ev.on("connection.update", (update) => {
+      if (update.connection === "connecting") {
+        this.updateSessionState(connection.id, {
+          status: "connecting",
+          lastError: null
+        });
+      }
+
       if (update.qr) {
+        this.clearReconnectTimer(connection.id);
+        this.updateSessionState(connection.id, {
+          status: "qr_ready",
+          qrCode: update.qr,
+          lastError: null
+        });
         this.logger.info(
           {
             connectionKey: connection.connectionKey,
@@ -263,6 +495,12 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
       }
 
       if (update.connection === "open") {
+        this.clearReconnectTimer(connection.id);
+        this.updateSessionState(connection.id, {
+          status: "connected",
+          qrCode: null,
+          lastError: null
+        });
         this.logger.info(
           {
             connectionKey: connection.connectionKey,
@@ -273,14 +511,44 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
       }
 
       if (update.connection === "close") {
+        const statusCode = extractDisconnectStatusCode(update.lastDisconnect?.error);
+        const lastError = mergeErrorDetails(
+          describeDisconnectReason(statusCode),
+          extractErrorMessage(update.lastDisconnect?.error)
+        );
+        const shouldResetAuth =
+          statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.badSession;
+        const shouldReconnect =
+          !this.stopped &&
+          !shouldResetAuth &&
+          statusCode !== DisconnectReason.connectionReplaced;
+
+        this.updateSessionState(connection.id, {
+          status: lastError ? "error" : "disconnected",
+          qrCode: null,
+          lastError
+        });
         this.logger.warn(
           {
             connectionKey: connection.connectionKey,
-            tenantId: connection.tenantId
+            tenantId: connection.tenantId,
+            statusCode,
+            shouldReconnect,
+            shouldResetAuth,
+            lastError
           },
           "Baileys connection closed"
         );
         this.sockets.delete(connection.id);
+
+        if (shouldResetAuth) {
+          void this.resetAuthState(connection, lastError);
+          return;
+        }
+
+        if (shouldReconnect) {
+          this.scheduleReconnect(connection);
+        }
       }
     });
 
@@ -332,5 +600,117 @@ export class BaileysWhatsAppProvider implements WhatsAppProvider, ProviderRuntim
       socket,
       connection
     };
+  }
+
+  private scheduleReconnect(connection: ProviderConnection, delayMs = 2_000): void {
+    if (this.stopped || !this.options.enabled || this.reconnectTimers.has(connection.id)) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(connection.id);
+
+      void this.ensureSocket(connection).catch((error) => {
+        this.updateSessionState(connection.id, {
+          status: "error",
+          lastError: mergeErrorDetails(
+            "No se pudo reconectar la sesion Baileys.",
+            extractErrorMessage(error)
+          )
+        });
+        this.logger.error(
+          {
+            error,
+            tenantId: connection.tenantId,
+            connectionKey: connection.connectionKey
+          },
+          "Failed to reconnect Baileys session"
+        );
+        this.scheduleReconnect(connection, 5_000);
+      });
+    }, delayMs);
+
+    timer.unref?.();
+    this.reconnectTimers.set(connection.id, timer);
+  }
+
+  private async resetAuthState(connection: ProviderConnection, reason: string | null): Promise<void> {
+    this.clearReconnectTimer(connection.id);
+
+    try {
+      await rm(path.join(this.options.authDir, connection.connectionKey), {
+        recursive: true,
+        force: true
+      });
+      this.logger.info(
+        {
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey
+        },
+        "Cleared Baileys auth state to request a fresh QR"
+      );
+    } catch (error) {
+      this.logger.error(
+        {
+          error,
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey
+        },
+        "Failed to clear Baileys auth state"
+      );
+    }
+
+    this.updateSessionState(connection.id, {
+      status: "connecting",
+      qrCode: null,
+      lastError: reason
+    });
+    this.scheduleReconnect(connection, 250);
+  }
+
+  private clearReconnectTimer(connectionId: string): void {
+    const timer = this.reconnectTimers.get(connectionId);
+
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer);
+    this.reconnectTimers.delete(connectionId);
+  }
+
+  private upsertSessionState(connection: ProviderConnection, status: BaileysSessionStatus): void {
+    const existing = this.sessionStates.get(connection.id);
+
+    this.sessionStates.set(connection.id, {
+      connection,
+      status,
+      qrCode: existing?.qrCode ?? null,
+      lastError: existing?.lastError ?? null,
+      updatedAt: new Date()
+    });
+  }
+
+  private updateSessionState(
+    connectionId: string,
+    input: {
+      status?: BaileysSessionStatus;
+      qrCode?: string | null;
+      lastError?: string | null;
+    }
+  ): void {
+    const existing = this.sessionStates.get(connectionId);
+
+    if (!existing) {
+      return;
+    }
+
+    this.sessionStates.set(connectionId, {
+      ...existing,
+      status: input.status ?? existing.status,
+      qrCode: input.qrCode !== undefined ? input.qrCode : existing.qrCode,
+      lastError: input.lastError !== undefined ? input.lastError : existing.lastError,
+      updatedAt: new Date()
+    });
   }
 }

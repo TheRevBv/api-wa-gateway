@@ -6,6 +6,7 @@ import { ListConversationMessagesUseCase } from "../../src/application/use-cases
 import { ListConversationsUseCase } from "../../src/application/use-cases/list-conversations";
 import { SendOutboundMessageUseCase } from "../../src/application/use-cases/send-outbound-message";
 import {
+  FakeBaileysSessionViewService,
   FakeWhatsAppProvider,
   FakeWhatsAppProviderRegistry,
   InMemoryRepositoryBundle,
@@ -21,6 +22,19 @@ describe("HTTP app", () => {
     repositories.conversations.listByTenant = repositories.listConversations.bind(repositories);
 
     const provider = new FakeWhatsAppProvider();
+    const baileysSessionView = new FakeBaileysSessionViewService();
+    baileysSessionView.sessions = [
+      {
+        connectionId: "connection-1",
+        tenantId: "tenant-1",
+        connectionKey: "tenant-1-session",
+        displayName: "Tenant 1 Session",
+        status: "qr_ready",
+        qrCode: "qr-value",
+        lastError: null,
+        updatedAt: new Date("2026-01-01T00:00:00.000Z")
+      }
+    ];
     const app = buildApp({
       logger: pino({ enabled: false }),
       dependencies: {
@@ -30,7 +44,9 @@ describe("HTTP app", () => {
         ),
         listConversations: new ListConversationsUseCase(repositories),
         getConversation: new GetConversationUseCase(repositories),
-        listConversationMessages: new ListConversationMessagesUseCase(repositories)
+        listConversationMessages: new ListConversationMessagesUseCase(repositories),
+        baileysSessionView,
+        baileysDashboardAuthToken: "secret-token"
       }
     });
 
@@ -79,6 +95,32 @@ describe("HTTP app", () => {
     });
 
     expect(invalidResponse.statusCode).toBe(400);
+
+    const authPageResponse = await app.inject({
+      method: "GET",
+      url: "/auth/baileys?auth=secret-token"
+    });
+
+    expect(authPageResponse.statusCode).toBe(200);
+    expect(authPageResponse.headers["content-type"]).toContain("text/html");
+    expect(authPageResponse.body).toContain("Baileys Login Console");
+    expect(authPageResponse.body).toContain("Tenant 1 Session");
+    expect(authPageResponse.body).toContain("data:image/png;base64");
+
+    const sessionsResponse = await app.inject({
+      method: "GET",
+      url: "/auth/baileys/sessions?auth=secret-token"
+    });
+
+    expect(sessionsResponse.statusCode).toBe(200);
+    expect(sessionsResponse.json().items).toHaveLength(1);
+
+    const unauthorizedResponse = await app.inject({
+      method: "GET",
+      url: "/auth/baileys/sessions?auth=wrong-token"
+    });
+
+    expect(unauthorizedResponse.statusCode).toBe(401);
 
     await app.close();
   });
