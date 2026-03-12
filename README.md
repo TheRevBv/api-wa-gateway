@@ -16,7 +16,7 @@ WhatsApp API gateway built as a modular monolith with Fastify, PostgreSQL, Drizz
 2. Start PostgreSQL:
 
 ```bash
-docker compose -p api-wa-gateway up -d
+docker compose --env-file .env -p api-wa-gateway up -d
 ```
 
 3. Install dependencies:
