@@ -347,6 +347,7 @@ export class RecordingWebhookDispatchService implements WebhookDispatchService {
 export class FakeWhatsAppProvider implements WhatsAppProvider {
   readonly providerName = "baileys" as const;
   readonly sentCommands: ProviderSendMessageCommand[] = [];
+  nextError: Error | null = null;
   nextResult: ProviderSendMessageResult = {
     providerMessageId: "provider-message-1",
     payloadRaw: { ok: true },
@@ -356,6 +357,13 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
 
   async sendMessage(command: ProviderSendMessageCommand) {
     this.sentCommands.push(command);
+
+    if (this.nextError) {
+      const error = this.nextError;
+      this.nextError = null;
+      throw error;
+    }
+
     return this.nextResult;
   }
 }

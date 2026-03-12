@@ -12,6 +12,31 @@ export interface SendOutboundMessageResult {
   message: Message;
 }
 
+const toOutboundBody = (input: SendMessageInput): string | null =>
+  input.content.type === "text" ? input.content.text : input.content.caption ?? null;
+
+const toOutboundMedia = (input: SendMessageInput): Message["media"] =>
+  input.content.type === "text"
+    ? null
+    : {
+        url: input.content.mediaUrl,
+        mimeType: input.content.mimeType,
+        filename: input.content.fileName,
+        caption: input.content.caption
+      };
+
+const extractProviderFailureReason = (payloadRaw: unknown): string | null => {
+  if (typeof payloadRaw !== "object" || payloadRaw === null) {
+    return null;
+  }
+
+  const value = payloadRaw as {
+    error?: unknown;
+  };
+
+  return typeof value.error === "string" && value.error.length > 0 ? value.error : null;
+};
+
 export class SendOutboundMessageUseCase {
   constructor(
     private readonly repositories: RepositoryBundle,
@@ -41,14 +66,50 @@ export class SendOutboundMessageUseCase {
     const conversation = await this.findOrCreateConversation(input.tenantId, contact.id);
     const provider = this.providerRegistry.get(connection.provider);
     const attemptedAt = new Date();
+    let providerResult;
 
-    const providerResult = await provider.sendMessage({
-      connection,
-      to: input.to,
-      content: input.content
-    });
+    try {
+      providerResult = await provider.sendMessage({
+        connection,
+        to: input.to,
+        content: input.content
+      });
+    } catch (error) {
+      const applicationError =
+        error instanceof ApplicationError
+          ? error
+          : new ApplicationError("Provider rejected the outbound message", {
+              code: "provider_send_failed",
+              statusCode: 502
+            });
+
+      await this.repositories.messages.create({
+        id: createId(),
+        tenantId: input.tenantId,
+        conversationId: conversation.id,
+        contactId: contact.id,
+        provider: connection.provider,
+        providerMessageId: null,
+        direction: "outbound",
+        type: input.content.type,
+        body: toOutboundBody(input),
+        media: toOutboundMedia(input),
+        payloadRaw: {
+          error: applicationError.message,
+          code: applicationError.code
+        },
+        status: "failed",
+        sentAt: null,
+        receivedAt: null
+      });
+      await this.repositories.conversations.touchLastMessageAt(conversation.id, attemptedAt);
+
+      throw applicationError;
+    }
 
     if (providerResult.status === "failed") {
+      const failureReason = extractProviderFailureReason(providerResult.payloadRaw);
+
       await this.repositories.messages.create({
         id: createId(),
         tenantId: input.tenantId,
@@ -58,16 +119,8 @@ export class SendOutboundMessageUseCase {
         providerMessageId: providerResult.providerMessageId,
         direction: "outbound",
         type: input.content.type,
-        body: input.content.type === "text" ? input.content.text : input.content.caption ?? null,
-        media:
-          input.content.type === "text"
-            ? null
-            : {
-                url: input.content.mediaUrl,
-                mimeType: input.content.mimeType,
-                filename: input.content.fileName,
-                caption: input.content.caption
-              },
+        body: toOutboundBody(input),
+        media: toOutboundMedia(input),
         payloadRaw: providerResult.payloadRaw,
         status: "failed",
         sentAt: null,
@@ -76,10 +129,15 @@ export class SendOutboundMessageUseCase {
 
       await this.repositories.conversations.touchLastMessageAt(conversation.id, attemptedAt);
 
-      throw new ApplicationError("Provider rejected the outbound message", {
+      throw new ApplicationError(
+        failureReason
+          ? `Provider rejected the outbound message: ${failureReason}`
+          : "Provider rejected the outbound message",
+        {
         code: "provider_send_failed",
         statusCode: 502
-      });
+        }
+      );
     }
 
     const message = await this.repositories.messages.create({
@@ -91,16 +149,8 @@ export class SendOutboundMessageUseCase {
       providerMessageId: providerResult.providerMessageId,
       direction: "outbound",
       type: input.content.type,
-      body: input.content.type === "text" ? input.content.text : input.content.caption ?? null,
-      media:
-        input.content.type === "text"
-          ? null
-          : {
-              url: input.content.mediaUrl,
-              mimeType: input.content.mimeType,
-              filename: input.content.fileName,
-              caption: input.content.caption
-            },
+      body: toOutboundBody(input),
+      media: toOutboundMedia(input),
       payloadRaw: providerResult.payloadRaw,
       status: "sent",
       sentAt: providerResult.sentAt ?? attemptedAt,

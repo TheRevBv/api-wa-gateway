@@ -23,11 +23,11 @@ import type { ProviderConnection } from "../../domain/providers/provider-connect
 type BaileysModule = typeof import("@whiskeysockets/baileys");
 
 const VERIFIED_BAILEYS_VERSION: [number, number, number] = [2, 3000, 1033846690];
-
-interface SocketHandle {
-  socket: WASocket;
-  connection: ProviderConnection;
-}
+const INITIAL_RECONNECT_DELAY_MS = 2_000;
+const STARTUP_RECONNECT_DELAY_MS = 5_000;
+const RESET_AUTH_RECONNECT_DELAY_MS = 250;
+const SEND_RETRY_CONNECTION_TIMEOUT_MS = 8_000;
+const RETRYABLE_SEND_ERROR_CODES = new Set([408, 428, 503]);
 
 interface SessionState {
   connection: ProviderConnection;
@@ -131,6 +131,12 @@ const mergeErrorDetails = (reason: string | null, message: string | null): strin
   }
 
   return reason ?? message;
+};
+
+const isRetryableSendError = (error: unknown): boolean => {
+  const statusCode = extractDisconnectStatusCode(error);
+
+  return statusCode !== null && RETRYABLE_SEND_ERROR_CODES.has(statusCode);
 };
 
 const normalizePhone = (value: string): string => value.replace(/[^\d]/g, "");
@@ -245,8 +251,8 @@ export class BaileysWhatsAppProvider
 {
   readonly providerName = "baileys" as const;
 
-  private readonly sockets = new Map<string, SocketHandle>();
-  private readonly pendingSockets = new Map<string, Promise<SocketHandle>>();
+  private readonly sockets = new Map<string, WASocket>();
+  private readonly pendingSockets = new Map<string, Promise<WASocket>>();
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
   private readonly sessionStates = new Map<string, SessionState>();
   private stopped = false;
@@ -271,30 +277,7 @@ export class BaileysWhatsAppProvider
     this.stopped = false;
     const connections = await this.connectionRepository.listActiveByProvider("baileys");
     connections.forEach((connection) => this.upsertSessionState(connection, "connecting"));
-    await Promise.all(
-      connections.map(async (connection) => {
-        try {
-          await this.ensureSocket(connection);
-        } catch (error) {
-          this.updateSessionState(connection.id, {
-            status: "error",
-            lastError: mergeErrorDetails(
-              "No se pudo iniciar la sesion Baileys.",
-              extractErrorMessage(error)
-            )
-          });
-          this.logger.error(
-            {
-              error,
-              tenantId: connection.tenantId,
-              connectionKey: connection.connectionKey
-            },
-            "Failed to bootstrap Baileys session"
-          );
-          this.scheduleReconnect(connection, 5_000);
-        }
-      })
-    );
+    await Promise.all(connections.map((connection) => this.bootstrapConnection(connection)));
   }
 
   async stop(): Promise<void> {
@@ -306,8 +289,8 @@ export class BaileysWhatsAppProvider
 
     this.reconnectTimers.clear();
 
-    for (const handle of this.sockets.values()) {
-      const socketWithClose = handle.socket as unknown as { end?: () => void; ws?: { close?: () => void } };
+    for (const socket of this.sockets.values()) {
+      const socketWithClose = socket as unknown as { end?: () => void; ws?: { close?: () => void } };
       socketWithClose.end?.();
       socketWithClose.ws?.close?.();
     }
@@ -359,21 +342,13 @@ export class BaileysWhatsAppProvider
       });
     }
 
-    const handle = await this.ensureSocket(command.connection);
-
     try {
-      const response = await handle.socket.sendMessage(
-        toWhatsAppJid(command.to),
-        toBaileysMessageContent(command.content)
-      );
-
-      return {
-        providerMessageId: response?.key.id ?? null,
-        payloadRaw: response ?? null,
-        status: "sent",
-        sentAt: new Date()
-      };
+      return await this.attemptSendMessage(command);
     } catch (error) {
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
+
       this.logger.error(
         {
           error,
@@ -394,7 +369,72 @@ export class BaileysWhatsAppProvider
     }
   }
 
-  private async ensureSocket(connection: ProviderConnection): Promise<SocketHandle> {
+  private async attemptSendMessage(
+    command: ProviderSendMessageCommand,
+    attempt = 1
+  ): Promise<ProviderSendMessageResult> {
+    const socket = await this.waitForReadySocket(command.connection);
+
+    try {
+      const response = await socket.sendMessage(
+        toWhatsAppJid(command.to),
+        toBaileysMessageContent(command.content)
+      );
+
+      return {
+        providerMessageId: response?.key.id ?? null,
+        payloadRaw: response ?? null,
+        status: "sent",
+        sentAt: new Date()
+      };
+    } catch (error) {
+      if (attempt === 1 && isRetryableSendError(error)) {
+        this.logger.warn(
+          {
+            error,
+            tenantId: command.connection.tenantId,
+            connectionKey: command.connection.connectionKey
+          },
+          "Retrying outbound Baileys send after transient connection error"
+        );
+
+        this.sockets.delete(command.connection.id);
+        this.scheduleReconnect(command.connection, INITIAL_RECONNECT_DELAY_MS);
+        await this.waitForReadySocket(command.connection, SEND_RETRY_CONNECTION_TIMEOUT_MS);
+
+        return this.attemptSendMessage(command, attempt + 1);
+      }
+
+      return {
+        providerMessageId: null,
+        payloadRaw: {
+          error: extractErrorMessage(error) ?? "Unknown Baileys send error",
+          statusCode: extractDisconnectStatusCode(error)
+        },
+        status: "failed",
+        sentAt: null
+      };
+    }
+  }
+
+  private async bootstrapConnection(connection: ProviderConnection): Promise<void> {
+    try {
+      await this.ensureSocket(connection);
+    } catch (error) {
+      this.markSessionAsErrored(connection, "No se pudo iniciar la sesion Baileys.", error);
+      this.logger.error(
+        {
+          error,
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey
+        },
+        "Failed to bootstrap Baileys session"
+      );
+      this.scheduleReconnect(connection, STARTUP_RECONNECT_DELAY_MS);
+    }
+  }
+
+  private async ensureSocket(connection: ProviderConnection): Promise<WASocket> {
     const existingSocket = this.sockets.get(connection.id);
 
     if (existingSocket) {
@@ -412,15 +452,15 @@ export class BaileysWhatsAppProvider
     this.pendingSockets.set(connection.id, socketPromise);
 
     try {
-      const handle = await socketPromise;
-      this.sockets.set(connection.id, handle);
-      return handle;
+      const socket = await socketPromise;
+      this.sockets.set(connection.id, socket);
+      return socket;
     } finally {
       this.pendingSockets.delete(connection.id);
     }
   }
 
-  private async createSocket(connection: ProviderConnection): Promise<SocketHandle> {
+  private async createSocket(connection: ProviderConnection): Promise<WASocket> {
     const authPath = path.join(this.options.authDir, connection.connectionKey);
     await mkdir(authPath, { recursive: true });
 
@@ -443,22 +483,7 @@ export class BaileysWhatsAppProvider
     }
 
     const authState = await useMultiFileAuthState(authPath);
-    let version = VERIFIED_BAILEYS_VERSION;
-
-    try {
-      const versionInfo = await fetchLatestBaileysVersion();
-      version = versionInfo.version as [number, number, number];
-    } catch (error) {
-      this.logger.warn(
-        {
-          error,
-          tenantId: connection.tenantId,
-          connectionKey: connection.connectionKey,
-          fallbackVersion: VERIFIED_BAILEYS_VERSION.join(".")
-        },
-        "Failed to resolve latest Baileys web version; using verified fallback"
-      );
-    }
+    const version = await this.resolveSocketVersion(connection, fetchLatestBaileysVersion);
 
     const socket = makeWASocket({
       auth: authState.state,
@@ -596,13 +621,85 @@ export class BaileysWhatsAppProvider
       }
     });
 
-    return {
-      socket,
-      connection
-    };
+    return socket;
   }
 
-  private scheduleReconnect(connection: ProviderConnection, delayMs = 2_000): void {
+  private async waitForReadySocket(
+    connection: ProviderConnection,
+    timeoutMs = SEND_RETRY_CONNECTION_TIMEOUT_MS
+  ): Promise<WASocket> {
+    const socket = await this.ensureSocket(connection);
+    const currentState = this.sessionStates.get(connection.id);
+
+    if (currentState?.status === "connected") {
+      return socket;
+    }
+
+    if (currentState?.status === "qr_ready") {
+      throw new ApplicationError("Baileys session requires QR scan", {
+        code: "provider_auth_required",
+        statusCode: 409
+      });
+    }
+
+    try {
+      await socket.waitForConnectionUpdate(async () => {
+        const status = this.sessionStates.get(connection.id)?.status;
+        return status === "connected" || status === "qr_ready";
+      }, timeoutMs);
+    } catch (error) {
+      this.logger.warn(
+        {
+          error,
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey
+        },
+        "Timed out waiting for Baileys session readiness"
+      );
+    }
+
+    const nextState = this.sessionStates.get(connection.id);
+
+    if (nextState?.status === "connected") {
+      return this.sockets.get(connection.id) ?? socket;
+    }
+
+    if (nextState?.status === "qr_ready") {
+      throw new ApplicationError("Baileys session requires QR scan", {
+        code: "provider_auth_required",
+        statusCode: 409
+      });
+    }
+
+    throw new ApplicationError("Baileys session is not ready to send messages", {
+      code: "provider_unavailable",
+      statusCode: 503
+    });
+  }
+
+  private async resolveSocketVersion(
+    connection: ProviderConnection,
+    fetchLatestBaileysVersion: BaileysModule["fetchLatestBaileysVersion"]
+  ): Promise<[number, number, number]> {
+    try {
+      const versionInfo = await fetchLatestBaileysVersion();
+      return versionInfo.version as [number, number, number];
+    } catch (error) {
+      this.logger.warn(
+        {
+          error,
+          tenantId: connection.tenantId,
+          connectionKey: connection.connectionKey,
+          fallbackVersion: VERIFIED_BAILEYS_VERSION.join(".")
+        },
+        "Failed to resolve latest Baileys web version; using verified fallback"
+      );
+
+      return VERIFIED_BAILEYS_VERSION;
+    }
+  }
+
+  private scheduleReconnect(connection: ProviderConnection, delayMs = INITIAL_RECONNECT_DELAY_MS): void {
     if (this.stopped || !this.options.enabled || this.reconnectTimers.has(connection.id)) {
       return;
     }
@@ -611,13 +708,7 @@ export class BaileysWhatsAppProvider
       this.reconnectTimers.delete(connection.id);
 
       void this.ensureSocket(connection).catch((error) => {
-        this.updateSessionState(connection.id, {
-          status: "error",
-          lastError: mergeErrorDetails(
-            "No se pudo reconectar la sesion Baileys.",
-            extractErrorMessage(error)
-          )
-        });
+        this.markSessionAsErrored(connection, "No se pudo reconectar la sesion Baileys.", error);
         this.logger.error(
           {
             error,
@@ -626,7 +717,7 @@ export class BaileysWhatsAppProvider
           },
           "Failed to reconnect Baileys session"
         );
-        this.scheduleReconnect(connection, 5_000);
+        this.scheduleReconnect(connection, STARTUP_RECONNECT_DELAY_MS);
       });
     }, delayMs);
 
@@ -665,7 +756,7 @@ export class BaileysWhatsAppProvider
       qrCode: null,
       lastError: reason
     });
-    this.scheduleReconnect(connection, 250);
+    this.scheduleReconnect(connection, RESET_AUTH_RECONNECT_DELAY_MS);
   }
 
   private clearReconnectTimer(connectionId: string): void {
@@ -677,6 +768,13 @@ export class BaileysWhatsAppProvider
 
     clearTimeout(timer);
     this.reconnectTimers.delete(connectionId);
+  }
+
+  private markSessionAsErrored(connection: ProviderConnection, prefix: string, error: unknown): void {
+    this.updateSessionState(connection.id, {
+      status: "error",
+      lastError: mergeErrorDetails(prefix, extractErrorMessage(error))
+    });
   }
 
   private upsertSessionState(connection: ProviderConnection, status: BaileysSessionStatus): void {

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { Logger } from "pino";
 import QRCode from "qrcode";
 import { z } from "zod";
@@ -17,6 +17,9 @@ const unauthorized = {
     message: "Invalid auth token"
   }
 };
+const dashboardNotConfiguredCode = "baileys_dashboard_not_configured";
+const emptyEnabledMessage = "No hay sesiones Baileys activas para los filtros enviados.";
+const emptyDisabledMessage = "Baileys esta deshabilitado en esta instancia. Activa ENABLE_BAILEYS=true.";
 
 interface DashboardSessionItem {
   connectionId: string;
@@ -65,6 +68,9 @@ const buildStatusMessage = (item: {
 
   return item.lastError ?? "Aun no hay QR disponible para esta sesion.";
 };
+
+const buildEmptyDashboardMessage = (enabled: boolean): string =>
+  enabled ? emptyEnabledMessage : emptyDisabledMessage;
 
 const buildDashboardSessionItems = async (
   sessions: Awaited<ReturnType<HttpRouteDependencies["baileysSessionView"]["listSessions"]>>
@@ -118,18 +124,10 @@ const renderDashboardHtml = (options: {
   tenantId?: string;
   connectionKey?: string;
 }): string => {
-  const tenantQuery = options.tenantId ? `&tenantId=${encodeURIComponent(options.tenantId)}` : "";
-  const connectionQuery = options.connectionKey
-    ? `&connectionKey=${encodeURIComponent(options.connectionKey)}`
-    : "";
   const initialItemsMarkup = options.initialItems.map(renderDashboardCard).join("");
   const initialItemsJson = JSON.stringify(options.initialItems);
-  const initialFeedback =
-    options.initialItems.length > 0
-      ? null
-      : options.enabled
-        ? "No hay sesiones Baileys activas para los filtros enviados."
-        : "Baileys esta deshabilitado en esta instancia. Activa ENABLE_BAILEYS=true.";
+  const initialFeedback = options.initialItems.length > 0 ? null : buildEmptyDashboardMessage(options.enabled);
+  const isFeedbackVisible = initialFeedback !== null;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -282,7 +280,7 @@ const renderDashboardHtml = (options: {
           <span class="chip">Path: /auth/baileys</span>
         </div>
       </section>
-      <div id="feedback" class="${initialFeedback ? "empty" : "empty"}"${initialFeedback ? "" : " hidden"}>${escapeHtml(initialFeedback ?? "Cargando sesiones...")}</div>
+      <div id="feedback" class="empty"${isFeedbackVisible ? "" : " hidden"}>${escapeHtml(initialFeedback ?? "Cargando sesiones...")}</div>
       <section id="grid" class="grid"${options.initialItems.length > 0 ? "" : " hidden"}>${initialItemsMarkup}</section>
     </main>
     <script>
@@ -337,8 +335,8 @@ const renderDashboardHtml = (options: {
           showFeedback(
             'empty',
             enabled
-              ? 'No hay sesiones Baileys activas para los filtros enviados.'
-              : 'Baileys está deshabilitado en esta instancia. Activa ENABLE_BAILEYS=true.'
+              ? ${JSON.stringify(emptyEnabledMessage)}
+              : ${JSON.stringify(emptyDisabledMessage)}
           );
           return;
         }
@@ -414,6 +412,26 @@ const assertDashboardAuth = (
   };
 };
 
+const sendDashboardAuthError = (
+  reply: FastifyReply,
+  authState: { error: { statusCode: number; message: string } }
+) =>
+  reply.status(authState.error.statusCode).send({
+    error: {
+      code: authState.error.statusCode === 401 ? unauthorized.error.code : dashboardNotConfiguredCode,
+      message: authState.error.message
+    }
+  });
+
+const listDashboardSessions = (
+  dependencies: HttpRouteDependencies,
+  authState: { tenantId?: string; connectionKey?: string }
+) =>
+  dependencies.baileysSessionView.listSessions({
+    tenantId: authState.tenantId,
+    connectionKey: authState.connectionKey
+  });
+
 export const registerBaileysAuthRoutes = (
   app: FastifyInstance<any, any, any, Logger>,
   dependencies: HttpRouteDependencies
@@ -423,19 +441,10 @@ export const registerBaileysAuthRoutes = (
     const authState = assertDashboardAuth(query, dependencies);
 
     if ("error" in authState) {
-      return reply.status(authState.error.statusCode).send({
-        error: {
-          code:
-            authState.error.statusCode === 401 ? "unauthorized" : "baileys_dashboard_not_configured",
-          message: authState.error.message
-        }
-      });
+      return sendDashboardAuthError(reply, authState);
     }
 
-    const sessions = await dependencies.baileysSessionView.listSessions({
-      tenantId: authState.tenantId,
-      connectionKey: authState.connectionKey
-    });
+    const sessions = await listDashboardSessions(dependencies, authState);
     const initialItems = await buildDashboardSessionItems(sessions);
 
     return reply.type("text/html").send(
@@ -454,19 +463,10 @@ export const registerBaileysAuthRoutes = (
     const authState = assertDashboardAuth(query, dependencies);
 
     if ("error" in authState) {
-      return reply.status(authState.error.statusCode).send({
-        error: {
-          code:
-            authState.error.statusCode === 401 ? "unauthorized" : "baileys_dashboard_not_configured",
-          message: authState.error.message
-        }
-      });
+      return sendDashboardAuthError(reply, authState);
     }
 
-    const sessions = await dependencies.baileysSessionView.listSessions({
-      tenantId: authState.tenantId,
-      connectionKey: authState.connectionKey
-    });
+    const sessions = await listDashboardSessions(dependencies, authState);
 
     const items = await buildDashboardSessionItems(sessions);
 
