@@ -1,0 +1,218 @@
+{
+  "info": {
+    "_postman_id": "894639ac-7027-4cae-bc6f-4dcfd2e8d25e",
+    "name": "api-wa-gateway",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send Text Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body?.conversation?.id) {",
+                  "  pm.collectionVariables.set('conversationId', body.conversation.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"{{phone}}\",\n  \"content\": {\n    \"type\": \"text\",\n    \"text\": \"hola desde postman\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Send Image Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"{{phone}}\",\n  \"content\": {\n    \"type\": \"image\",\n    \"mediaUrl\": \"https://example.com/sample.jpg\",\n    \"mimeType\": \"image/jpeg\",\n    \"caption\": \"imagen de prueba\",\n    \"fileName\": \"sample.jpg\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Send Document Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"{{phone}}\",\n  \"content\": {\n    \"type\": \"document\",\n    \"mediaUrl\": \"https://example.com/sample.pdf\",\n    \"mimeType\": \"application/pdf\",\n    \"caption\": \"documento de prueba\",\n    \"fileName\": \"sample.pdf\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}", "messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "List Conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body?.items) && body.items.length > 0) {",
+                  "  pm.collectionVariables.set('conversationId', body.items[0].conversation.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/conversations?limit={{limit}}&offset={{offset}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}", "conversations"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "offset",
+                  "value": "{{offset}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tenants", "{{tenantId}}", "conversations", "{{conversationId}}"]
+            }
+          }
+        },
+        {
+          "name": "List Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tenants/{{tenantId}}/conversations/{{conversationId}}/messages?limit={{limit}}&offset={{offset}}",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "v1",
+                "tenants",
+                "{{tenantId}}",
+                "conversations",
+                "{{conversationId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "offset",
+                  "value": "{{offset}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "tenantId",
+      "value": "tenant_demo"
+    },
+    {
+      "key": "phone",
+      "value": "5215512345678"
+    },
+    {
+      "key": "conversationId",
+      "value": "replace-after-send-or-list"
+    },
+    {
+      "key": "limit",
+      "value": "20"
+    },
+    {
+      "key": "offset",
+      "value": "0"
+    }
+  ]
+}

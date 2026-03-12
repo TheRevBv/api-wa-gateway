@@ -16,7 +16,7 @@ WhatsApp API gateway built as a modular monolith with Fastify, PostgreSQL, Drizz
 2. Start PostgreSQL:
 
 ```bash
-docker compose up -d
+docker compose -p api-wa-gateway up -d
 ```
 
 3. Install dependencies:
@@ -43,13 +43,13 @@ pnpm dev
 ### Health
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:8001/health
 ```
 
 ### Send outbound message
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/tenants/tenant_demo/messages \
+curl -X POST http://localhost:8001/api/v1/tenants/tenant_demo/messages \
   -H "content-type: application/json" \
   -d '{
     "to": "5215512345678",
@@ -63,13 +63,13 @@ curl -X POST http://localhost:3000/api/v1/tenants/tenant_demo/messages \
 ### List conversations
 
 ```bash
-curl "http://localhost:3000/api/v1/tenants/tenant_demo/conversations?limit=20&offset=0"
+curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations?limit=20&offset=0"
 ```
 
 ### List messages in a conversation
 
 ```bash
-curl "http://localhost:3000/api/v1/tenants/tenant_demo/conversations/<conversation-id>/messages?limit=50&offset=0"
+curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations/<conversation-id>/messages?limit=50&offset=0"
 ```
 
 ## Baileys notes
@@ -84,6 +84,11 @@ curl "http://localhost:3000/api/v1/tenants/tenant_demo/conversations/<conversati
 ```bash
 pnpm test
 ```
+
+## Extra tooling
+
+- SQL manual para alta de tenant: `scripts/sql/add-tenant.sql`
+- Coleccion Postman: `docs/postman/api-wa-gateway.postman_collection.json`
 
 ## Migration path to Meta
 
