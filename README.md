@@ -151,6 +151,14 @@ pnpm build
 - `Deploy Production` hace un despliegue manual a una VM Linux por SSH usando la imagen publicada y `deploy/compose.production.yml`.
 - La guía operativa completa está en `docs/deployment.md`.
 
+## Documentación para integradores
+
+- Inicio rápido: `docs/integrator/quickstart.md`
+- Referencia API: `docs/integrator/api.md`
+- Webhooks: `docs/integrator/webhooks.md`
+- Errores: `docs/integrator/errors.md`
+- Alta de tenant e integración: `docs/integrator/tenant-onboarding.md`
+
 ## Herramientas extra
 
 - SQL manual para alta de tenant: `scripts/sql/add-tenant.sql`
