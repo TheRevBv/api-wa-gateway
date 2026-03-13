@@ -146,6 +146,7 @@ pnpm test
 
 - SQL manual para alta de tenant: `scripts/sql/add-tenant.sql`
 - Coleccion Postman: `docs/postman/api-wa-gateway.postman_collection.json`
+- OpenAPI JSON: `docs/openapi/api-wa-gateway.openapi.json`
 
 ## Provider model
 

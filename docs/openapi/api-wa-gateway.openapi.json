@@ -1,0 +1,1008 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "api-wa-gateway",
+    "version": "0.1.0",
+    "description": "Machine-consumable API contract for the WhatsApp gateway. It includes the tenant-scoped public API, the Baileys session JSON endpoint, and the Meta webhook verification/ingress endpoints."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8001",
+      "description": "Local development"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Messages"
+    },
+    {
+      "name": "Conversations"
+    },
+    {
+      "name": "Baileys"
+    },
+    {
+      "name": "Meta Webhooks"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "getHealth",
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Gateway is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/messages": {
+      "post": {
+        "tags": ["Messages"],
+        "operationId": "sendTenantMessage",
+        "summary": "Send an outbound WhatsApp message",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message accepted and persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant not found or inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No active provider connection for the tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider send failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/conversations": {
+      "get": {
+        "tags": ["Conversations"],
+        "operationId": "listTenantConversations",
+        "summary": "List conversations for a tenant",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/conversations/{conversationId}": {
+      "get": {
+        "tags": ["Conversations"],
+        "operationId": "getTenantConversation",
+        "summary": "Get a conversation by id",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenantId}/conversations/{conversationId}/messages": {
+      "get": {
+        "tags": ["Conversations"],
+        "operationId": "listTenantConversationMessages",
+        "summary": "List messages for a conversation",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMessagesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/baileys/sessions": {
+      "get": {
+        "tags": ["Baileys"],
+        "operationId": "listBaileysSessions",
+        "summary": "List Baileys session status for the QR dashboard",
+        "parameters": [
+          {
+            "name": "auth",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "connectionKey",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Baileys sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaileysSessionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid auth token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dashboard auth token not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/meta/{connectionKey}": {
+      "get": {
+        "tags": ["Meta Webhooks"],
+        "operationId": "verifyMetaWebhook",
+        "summary": "Verify the Meta webhook challenge for a specific connection",
+        "parameters": [
+          {
+            "name": "connectionKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification challenge accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Verification failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Meta provider connection not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Meta Webhooks"],
+        "operationId": "receiveMetaWebhookEvent",
+        "summary": "Receive inbound webhook events from Meta",
+        "parameters": [
+          {
+            "name": "connectionKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "x-hub-signature-256",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "HMAC SHA-256 signature sent by Meta"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaWebhookAckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload invalid or connection mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Meta signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Meta provider connection not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "description": "Optional validation details",
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "phone",
+          "displayName",
+          "providerContactId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": ["string", "null"]
+          },
+          "providerContactId": {
+            "type": ["string", "null"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Conversation": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "contactId",
+          "channel",
+          "status",
+          "startedAt",
+          "lastMessageAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "contactId": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["whatsapp"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "archived"]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastMessageAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MessageMedia": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "providerMediaId": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "conversationId",
+          "contactId",
+          "provider",
+          "providerMessageId",
+          "direction",
+          "type",
+          "body",
+          "media",
+          "status",
+          "sentAt",
+          "receivedAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "contactId": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["baileys", "meta"]
+          },
+          "providerMessageId": {
+            "type": ["string", "null"]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["inbound", "outbound"]
+          },
+          "type": {
+            "type": "string",
+            "enum": ["text", "image", "document"]
+          },
+          "body": {
+            "type": ["string", "null"]
+          },
+          "media": {
+            "$ref": "#/components/schemas/MessageMedia"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["received", "sent", "failed"]
+          },
+          "sentAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "receivedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "required": ["total", "limit", "offset"],
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "SendTextContent": {
+        "type": "object",
+        "required": ["type", "text"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "text"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "SendImageContent": {
+        "type": "object",
+        "required": ["type", "mediaUrl"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "image"
+          },
+          "mediaUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          }
+        }
+      },
+      "SendDocumentContent": {
+        "type": "object",
+        "required": ["type", "mediaUrl", "fileName"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "document"
+          },
+          "mediaUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "required": ["to", "content"],
+        "properties": {
+          "to": {
+            "type": "string",
+            "minLength": 8
+          },
+          "content": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SendTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SendImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/SendDocumentContent"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type"
+            }
+          }
+        }
+      },
+      "SendMessageResponse": {
+        "type": "object",
+        "required": ["contact", "conversation", "message"],
+        "properties": {
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          },
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          }
+        }
+      },
+      "ConversationListItem": {
+        "type": "object",
+        "required": ["conversation", "contact"],
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          }
+        }
+      },
+      "ConversationListResponse": {
+        "type": "object",
+        "required": ["items", "pagination"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationListItem"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "ConversationDetailResponse": {
+        "type": "object",
+        "required": ["conversation", "contact"],
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          }
+        }
+      },
+      "ConversationMessagesResponse": {
+        "type": "object",
+        "required": ["items", "pagination"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "BaileysSessionItem": {
+        "type": "object",
+        "required": [
+          "connectionId",
+          "tenantId",
+          "connectionKey",
+          "displayName",
+          "status",
+          "statusLabel",
+          "statusMessage",
+          "qrCodeDataUrl",
+          "lastError",
+          "updatedAt"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "connectionKey": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusLabel": {
+            "type": "string"
+          },
+          "statusMessage": {
+            "type": "string"
+          },
+          "qrCodeDataUrl": {
+            "type": ["string", "null"]
+          },
+          "lastError": {
+            "type": ["string", "null"]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BaileysSessionsResponse": {
+        "type": "object",
+        "required": ["enabled", "items"],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BaileysSessionItem"
+            }
+          }
+        }
+      },
+      "MetaWebhookAckResponse": {
+        "type": "object",
+        "required": ["received", "processedMessages", "ignoredEvents"],
+        "properties": {
+          "received": {
+            "type": "boolean",
+            "const": true
+          },
+          "processedMessages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ignoredEvents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

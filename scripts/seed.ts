@@ -6,12 +6,13 @@ import { createDatabaseConnection } from "../src/infrastructure/database/client"
 import {
   providerConnectionsTable,
   tenantsTable,
-  webhookSubscriptionsTable
+  webhookSubscriptionsTable,
 } from "../src/infrastructure/database/schema";
 
 const DEMO_TENANT_ID = "tenant_demo";
 const DEMO_WEBHOOK_ID = "webhook_demo";
-const DEMO_PROVIDER_CONNECTION_ID = "provider_connection_demo";
+const DEMO_BAILEYS_PROVIDER_CONNECTION_ID = "baileys_demo_connection";
+const DEMO_META_PROVIDER_CONNECTION_ID = "meta_demo_connection";
 
 const run = async (): Promise<void> => {
   const env = loadEnvironment();
@@ -26,7 +27,7 @@ const run = async (): Promise<void> => {
         name: "Demo Tenant",
         status: "active",
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       })
       .onConflictDoNothing();
 
@@ -39,33 +40,55 @@ const run = async (): Promise<void> => {
         secret: "demo-secret",
         isActive: true,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       })
       .onConflictDoNothing();
 
     await connection.db
       .insert(providerConnectionsTable)
-      .values({
-        id: DEMO_PROVIDER_CONNECTION_ID,
-        tenantId: DEMO_TENANT_ID,
-        provider: "baileys",
-        connectionKey: "demo-baileys-session",
-        displayName: "Demo Baileys Session",
-        status: "active",
-        config: {
-          note: "Update this seed with your real session metadata if needed",
-          seededAt: now.toISOString(),
-          installReference: createId()
+      .values([
+        {
+          id: DEMO_BAILEYS_PROVIDER_CONNECTION_ID,
+          tenantId: DEMO_TENANT_ID,
+          provider: "baileys",
+          connectionKey: "demo-baileys-session",
+          displayName: "Demo Baileys Session",
+          status: "active",
+          config: {
+            note: "Update this seed with your real session metadata if needed",
+            seededAt: now.toISOString(),
+            installReference: createId(),
+          },
+          createdAt: now,
+          updatedAt: now,
         },
-        createdAt: now,
-        updatedAt: now
-      })
+        {
+          id: DEMO_META_PROVIDER_CONNECTION_ID,
+          tenantId: DEMO_TENANT_ID,
+          provider: "meta",
+          connectionKey: "123456789012345",
+          displayName: "Demo Meta Cloud API",
+          status: "inactive",
+          config: {
+            accessToken: "meta-test-access-token",
+            verifyToken: "meta-test-verify-token",
+            appSecret: "meta-test-app-secret",
+            apiVersion: "v23.0",
+            note: "Replace these placeholder values with real Meta Cloud API credentials before activating this provider",
+            seededAt: now.toISOString(),
+            installReference: createId()
+          },
+          createdAt: now,
+          updatedAt: now
+        }
+      ])
       .onConflictDoNothing();
 
     console.log("Seed completed");
     console.log(`Tenant ID: ${DEMO_TENANT_ID}`);
     console.log(`Webhook ID: ${DEMO_WEBHOOK_ID}`);
-    console.log(`Provider connection ID: ${DEMO_PROVIDER_CONNECTION_ID}`);
+    console.log(`Baileys provider connection ID: ${DEMO_BAILEYS_PROVIDER_CONNECTION_ID}`);
+    console.log(`Meta provider connection ID: ${DEMO_META_PROVIDER_CONNECTION_ID}`);
   } finally {
     await connection.pool.end();
   }
