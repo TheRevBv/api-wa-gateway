@@ -6,6 +6,7 @@ import { registerBaileysAuthRoutes } from "./routes/baileys-auth-routes";
 import { registerConversationRoutes } from "./routes/conversation-routes";
 import { registerHealthRoutes } from "./routes/health-routes";
 import { registerMessageRoutes } from "./routes/message-routes";
+import { registerMetaWebhookRoutes } from "./routes/meta-webhook-routes";
 
 export const registerRoutes = (
   app: FastifyInstance<any, any, any, Logger>,
@@ -13,6 +14,7 @@ export const registerRoutes = (
 ): void => {
   registerHealthRoutes(app);
   registerBaileysAuthRoutes(app, dependencies);
+  registerMetaWebhookRoutes(app, dependencies);
   registerMessageRoutes(app, dependencies);
   registerConversationRoutes(app, dependencies);
 };

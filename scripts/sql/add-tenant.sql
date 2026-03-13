@@ -2,6 +2,10 @@
 --   psql "$DATABASE_URL" -f scripts/sql/add-tenant.sql
 --
 -- Edit the values below before running the script.
+-- For Meta use:
+--   \set provider 'meta'
+--   \set connection_key '<PHONE_NUMBER_ID>'
+-- Then update provider_connections.config with accessToken, verifyToken, appSecret and apiVersion.
 
 \set tenant_id 'tenant_acme'
 \set tenant_name 'Acme Tenant'

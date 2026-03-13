@@ -7,6 +7,7 @@ import { ListConversationsUseCase } from "../../src/application/use-cases/list-c
 import { SendOutboundMessageUseCase } from "../../src/application/use-cases/send-outbound-message";
 import {
   FakeBaileysSessionViewService,
+  FakeMetaWebhookService,
   FakeWhatsAppProvider,
   FakeWhatsAppProviderRegistry,
   InMemoryRepositoryBundle,
@@ -23,6 +24,7 @@ describe("HTTP app", () => {
 
     const provider = new FakeWhatsAppProvider();
     const baileysSessionView = new FakeBaileysSessionViewService();
+    const metaWebhookService = new FakeMetaWebhookService();
     baileysSessionView.sessions = [
       {
         connectionId: "connection-1",
@@ -45,6 +47,7 @@ describe("HTTP app", () => {
         listConversations: new ListConversationsUseCase(repositories),
         getConversation: new GetConversationUseCase(repositories),
         listConversationMessages: new ListConversationMessagesUseCase(repositories),
+        metaWebhookService,
         baileysSessionView,
         baileysDashboardAuthToken: "secret-token"
       }
@@ -121,6 +124,37 @@ describe("HTTP app", () => {
     });
 
     expect(unauthorizedResponse.statusCode).toBe(401);
+
+    const verificationResponse = await app.inject({
+      method: "GET",
+      url: "/webhooks/meta/phone-number-1?hub.mode=subscribe&hub.verify_token=verify-token&hub.challenge=challenge-123"
+    });
+
+    expect(verificationResponse.statusCode).toBe(200);
+    expect(verificationResponse.body).toBe("challenge-token");
+
+    const webhookPayload = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: []
+    });
+    const webhookResponse = await app.inject({
+      method: "POST",
+      url: "/webhooks/meta/phone-number-1",
+      headers: {
+        "content-type": "application/json",
+        "x-hub-signature-256": "sha256=test"
+      },
+      payload: webhookPayload
+    });
+
+    expect(webhookResponse.statusCode).toBe(200);
+    expect(webhookResponse.json()).toEqual({
+      received: true,
+      processedMessages: 1,
+      ignoredEvents: 0
+    });
+    expect(metaWebhookService.verificationInputs).toHaveLength(1);
+    expect(metaWebhookService.eventInputs[0]?.rawBody).toBe(webhookPayload);
 
     await app.close();
   });

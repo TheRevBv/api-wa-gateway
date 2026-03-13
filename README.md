@@ -8,7 +8,8 @@ WhatsApp API gateway built as a modular monolith with Fastify, PostgreSQL, Drizz
 - persistence for tenants, contacts, conversations, messages and webhook dispatches
 - tenant-scoped conversation query API
 - webhook routing with signature support and retry inline
-- Baileys adapter prepared as the initial provider
+- Baileys adapter for local/dev sessions
+- Meta WhatsApp Cloud API adapter for outbound and inbound webhook processing
 
 ## Local setup
 
@@ -82,15 +83,58 @@ curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations/<conversati
 - Web login/QR dashboard:
 
 ```text
-http://localhost:3000/auth/baileys?auth=<BAILEYS_DASHBOARD_AUTH_TOKEN>
+http://localhost:8001/auth/baileys?auth=<BAILEYS_DASHBOARD_AUTH_TOKEN>
 ```
 
 - Optional filters:
 
 ```text
-http://localhost:3000/auth/baileys?auth=<token>&tenantId=tenant_demo
-http://localhost:3000/auth/baileys?auth=<token>&connectionKey=demo-baileys-session
+http://localhost:8001/auth/baileys?auth=<token>&tenantId=tenant_demo
+http://localhost:8001/auth/baileys?auth=<token>&connectionKey=demo-baileys-session
 ```
+
+## Meta Cloud API notes
+
+- Meta uses the existing `provider_connections` table with `provider = 'meta'`.
+- `connection_key` must be the WhatsApp `phone_number_id`.
+- Only one provider connection should stay active per tenant at a time.
+- Meta webhook endpoints:
+
+```text
+GET  /webhooks/meta/:connectionKey
+POST /webhooks/meta/:connectionKey
+```
+
+- Required `provider_connections.config` shape for Meta:
+
+```json
+{
+  "accessToken": "EAA...",
+  "verifyToken": "my-verify-token",
+  "appSecret": "my-app-secret",
+  "apiVersion": "v23.0"
+}
+```
+
+- Example SQL after creating the tenant:
+
+```sql
+UPDATE provider_connections
+SET
+  provider = 'meta',
+  connection_key = '<PHONE_NUMBER_ID>',
+  display_name = 'Acme Meta Production',
+  config = jsonb_build_object(
+    'accessToken', '<META_ACCESS_TOKEN>',
+    'verifyToken', '<META_VERIFY_TOKEN>',
+    'appSecret', '<META_APP_SECRET>',
+    'apiVersion', 'v23.0'
+  ),
+  updated_at = NOW()
+WHERE id = 'provider_connection_acme';
+```
+
+- Meta sends inbound media references as provider media IDs. The gateway persists those IDs in `message.media.providerMediaId`.
 
 ## Testing
 
@@ -103,8 +147,9 @@ pnpm test
 - SQL manual para alta de tenant: `scripts/sql/add-tenant.sql`
 - Coleccion Postman: `docs/postman/api-wa-gateway.postman_collection.json`
 
-## Migration path to Meta
+## Provider model
 
-- Keep using `ProviderConnection` as the tenant-provider binding.
-- Add a `MetaWhatsAppProvider` implementing the same `WhatsAppProvider` port.
-- Reuse the same inbound normalized contract and outbound application use case.
+- `ProviderConnection` remains the tenant-provider binding.
+- `BaileysWhatsAppProvider` and `MetaWhatsAppProvider` share the same internal port.
+- Outbound still flows through the same `SendOutboundMessageUseCase`.
+- Inbound still lands in the same `ReceiveInboundMessageUseCase`.

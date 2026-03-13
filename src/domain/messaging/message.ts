@@ -5,7 +5,8 @@ export type MessageType = "text" | "image" | "document";
 export type MessageStatus = "received" | "sent" | "failed";
 
 export interface MessageMedia {
-  url: string;
+  url?: string;
+  providerMediaId?: string;
   mimeType?: string;
   filename?: string;
   caption?: string;

@@ -1,6 +1,34 @@
 import type { MessageContent } from "../../domain/messaging/message";
 import type { ProviderConnection, ProviderName } from "../../domain/providers/provider-connection";
 
+export interface InboundTextMessageContent {
+  type: "text";
+  text: string;
+}
+
+export interface InboundImageMessageContent {
+  type: "image";
+  mediaUrl?: string;
+  providerMediaId?: string;
+  mimeType?: string;
+  caption?: string;
+  fileName?: string;
+}
+
+export interface InboundDocumentMessageContent {
+  type: "document";
+  mediaUrl?: string;
+  providerMediaId?: string;
+  mimeType?: string;
+  caption?: string;
+  fileName?: string;
+}
+
+export type InboundMessageContent =
+  | InboundTextMessageContent
+  | InboundImageMessageContent
+  | InboundDocumentMessageContent;
+
 export interface InboundProviderMessage {
   tenantId: string;
   provider: ProviderName;
@@ -8,7 +36,7 @@ export interface InboundProviderMessage {
   providerContactId: string | null;
   from: string;
   displayName: string | null;
-  content: MessageContent;
+  content: InboundMessageContent;
   payloadRaw: unknown;
   receivedAt: Date;
 }

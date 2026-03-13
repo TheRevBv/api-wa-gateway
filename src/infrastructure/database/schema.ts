@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 
 import type { ConversationChannel, ConversationStatus } from "../../domain/messaging/conversation";
@@ -35,7 +36,10 @@ export const providerConnectionsTable = pgTable(
   },
   (table) => [
     uniqueIndex("provider_connections_connection_key_idx").on(table.connectionKey),
-    uniqueIndex("provider_connections_tenant_provider_idx").on(table.tenantId, table.provider)
+    uniqueIndex("provider_connections_tenant_provider_idx").on(table.tenantId, table.provider),
+    uniqueIndex("provider_connections_tenant_active_idx")
+      .on(table.tenantId)
+      .where(sql`${table.status} = 'active'`)
   ]
 );
 

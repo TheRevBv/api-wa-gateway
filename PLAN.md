@@ -162,3 +162,95 @@
 3. Diseñar el schema inicial incluyendo `provider_connections`; sin eso Baileys y Meta quedan mal modelados desde el inicio.
 4. Cortar el primer vertical slice objetivo como `send outbound text/media -> persist message -> response estable`, y después `receive inbound -> persist -> webhook`.
 5. Dejar desde el día uno el checklist de smoke test local con tenant seed, webhook echo endpoint y sesión Baileys real.
+
+
+
+# FASE 2 - IMPLEMENTAR META
+
+# Plan limpio para integrar Meta WhatsApp Cloud API
+
+## Resumen
+Integrar Meta como segundo proveedor real sin tocar dominio ni casos de uso. La implementación debe reutilizar el contrato actual `WhatsAppProvider`, `ReceiveInboundMessageUseCase` y `SendOutboundMessageUseCase`, y agregar solo dos piezas nuevas: un adaptador outbound de Meta y un ingreso HTTP de webhook Meta.
+
+La decisión base es usar **Cloud API por HTTP directo**, no el SDK Node archivado. La configuración operativa queda por tenant en `provider_connections.config`, y para Meta el `connectionKey` será el `phoneNumberId`. Con eso se resuelve outbound, verificación del webhook e inbound multi-tenant sin nuevas tablas.
+
+## Cambios clave
+### Proveedor Meta
+- Agregar `MetaWhatsAppProvider` que implemente `WhatsAppProvider` y use un `MetaCloudApiClient` interno.
+- Registrar el provider en el runtime junto con Baileys; Baileys sigue siendo el único `ProviderRuntime` activo.
+- Validar `provider_connections.config` con un esquema dedicado. Config requerida para Meta:
+  - `accessToken: string`
+  - `verifyToken: string`
+  - `appSecret: string`
+  - `apiVersion: string`
+  - `baseUrl?: string` con default `https://graph.facebook.com`
+- Fijar la convención: `provider="meta"` y `connectionKey=<phoneNumberId>`.
+
+### Outbound
+- Resolver provider por `providerConnections.findActiveByTenantId` como hoy; si el tenant usa `meta`, `SendOutboundMessageUseCase` no cambia.
+- Mapear `MessageContent` actual a Cloud API:
+  - `text` -> mensaje `text`
+  - `image` -> mensaje `image` por `link`
+  - `document` -> mensaje `document` por `link`
+- Guardar la respuesta raw de Graph API en `payloadRaw`.
+- Normalizar errores HTTP/API de Meta a `ApplicationError(code="provider_send_failed", statusCode=502)` con el detalle real del provider.
+- No incluir templates, audio, video, stickers ni status sync en esta fase.
+
+### Webhook Meta
+- Exponer `GET /webhooks/meta/:connectionKey` para verificación del webhook.
+- Exponer `POST /webhooks/meta/:connectionKey` para eventos inbound.
+- Resolver la conexión activa por `provider=meta` + `connectionKey`; agregar un método de repositorio explícito para eso en vez de buscar por JSON config.
+- En `GET`, comparar `hub.verify_token` contra `config.verifyToken` y responder `hub.challenge`.
+- En `POST`, capturar el **raw body** y validar `X-Hub-Signature-256` usando `config.appSecret`.
+- Procesar solo eventos que traigan mensajes inbound de usuario. Ignorar `statuses`, eventos sin `messages` y tipos fuera de `text | image | document` con `200` para no provocar retries innecesarios.
+- Verificar que `value.metadata.phone_number_id` coincida con `:connectionKey`; si no coincide, responder `400`.
+- Mapear el payload Meta al contrato `InboundProviderMessage` actual y delegar a `ReceiveInboundMessageUseCase`.
+- Para media inbound, persistir URL o identificador y metadata disponible del payload; no descargar archivos ni resolver media binaria en esta fase.
+
+### Interfaces y contratos
+- Extender el repositorio de `ProviderConnection` con `findActiveByProviderAndConnectionKey(provider, connectionKey)`.
+- No cambiar esquema de dominio ni tablas existentes.
+- Documentar la forma exacta de `provider_connections.config` para Meta y agregar ejemplo de seed/SQL manual.
+- Agregar ejemplos HTTP para el webhook de verificación y para un tenant configurado con Meta.
+
+## Secuencia de implementación
+1. Añadir el parser/validator de configuración Meta y el método de repositorio por `provider + connectionKey`.
+2. Implementar `MetaCloudApiClient` y `MetaWhatsAppProvider`.
+3. Registrar Meta en el provider registry del runtime.
+4. Implementar las rutas `GET/POST /webhooks/meta/:connectionKey`.
+5. Implementar el validador de firma y el mapper de payload inbound de Meta.
+6. Conectar el webhook Meta con `ReceiveInboundMessageUseCase`.
+7. Agregar tests y luego documentación operativa.
+
+## Plan de pruebas
+- Unitarias:
+  - parseo de config Meta válido e inválido
+  - mapeo outbound `text/image/document`
+  - normalización de errores de Graph API
+  - validación de firma `X-Hub-Signature-256`
+  - mapeo inbound Meta -> `InboundProviderMessage`
+- HTTP:
+  - `GET /webhooks/meta/:connectionKey` éxito
+  - `GET` con `verify_token` incorrecto
+  - `POST` con firma inválida
+  - `POST` con `phone_number_id` que no coincide con la ruta
+  - `POST` con inbound `text`
+  - `POST` con `status` o evento no soportado y respuesta `200`
+- Integración manual:
+  - tenant con `provider=meta`
+  - verificación de webhook en Meta
+  - inbound real persistido en contacto/conversación/mensaje
+  - outbound real `text`, `image`, `document`
+  - dispatch al webhook del tenant después del inbound
+
+## Supuestos y defaults
+- Alcance elegido: **full inbound/outbound** para Meta.
+- Configuración elegida: `provider_connections.config`.
+- No se usará el SDK Node archivado; se usará Cloud API por HTTP directo.
+- Una `provider_connection` Meta representa un solo `phoneNumberId`.
+- No habrá nueva tabla específica de Meta en esta fase.
+- No se implementarán templates, estados de entrega, media download ni sincronización de historial en esta fase.
+- Referencias oficiales usadas para esta decisión:
+  - Meta-hosted SDK docs: https://whatsapp.github.io/WhatsApp-Nodejs-SDK/
+  - Receiving messages: https://whatsapp.github.io/WhatsApp-Nodejs-SDK/receivingMessages/
+  - SDK archivado: https://github.com/WhatsApp/WhatsApp-Nodejs-SDK/issues/31

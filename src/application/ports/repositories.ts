@@ -103,6 +103,10 @@ export interface MessageRepository {
 
 export interface ProviderConnectionRepository {
   findActiveByTenantId(tenantId: string): Promise<ProviderConnection | null>;
+  findActiveByProviderAndConnectionKey(
+    provider: ProviderName,
+    connectionKey: string
+  ): Promise<ProviderConnection | null>;
   listActiveByProvider(provider: ProviderName): Promise<ProviderConnection[]>;
 }
 

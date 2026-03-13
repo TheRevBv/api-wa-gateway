@@ -3,6 +3,12 @@ import type {
   BaileysSessionViewService
 } from "../../src/application/ports/baileys-session-view";
 import type {
+  MetaWebhookEventInput,
+  MetaWebhookEventResult,
+  MetaWebhookService,
+  MetaWebhookVerificationInput
+} from "../../src/application/ports/meta-webhook-service";
+import type {
   ContactRepository,
   ConversationRepository,
   MessageRepository,
@@ -228,6 +234,20 @@ export class InMemoryProviderConnectionRepository implements ProviderConnectionR
     );
   }
 
+  async findActiveByProviderAndConnectionKey(
+    provider: ProviderConnection["provider"],
+    connectionKey: string
+  ) {
+    return (
+      [...this.items.values()].find(
+        (connection) =>
+          connection.provider === provider &&
+          connection.connectionKey === connectionKey &&
+          connection.status === "active"
+      ) ?? null
+    );
+  }
+
   async listActiveByProvider(provider: ProviderConnection["provider"]) {
     return [...this.items.values()].filter(
       (connection) => connection.provider === provider && connection.status === "active"
@@ -396,6 +416,26 @@ export class FakeBaileysSessionViewService implements BaileysSessionViewService 
 
       return true;
     });
+  }
+}
+
+export class FakeMetaWebhookService implements MetaWebhookService {
+  readonly verificationInputs: MetaWebhookVerificationInput[] = [];
+  readonly eventInputs: MetaWebhookEventInput[] = [];
+  nextChallenge = "challenge-token";
+  nextEventResult: MetaWebhookEventResult = {
+    processedMessages: 1,
+    ignoredEvents: 0
+  };
+
+  async verifyWebhook(input: MetaWebhookVerificationInput): Promise<string> {
+    this.verificationInputs.push(input);
+    return this.nextChallenge;
+  }
+
+  async handleWebhookEvent(input: MetaWebhookEventInput): Promise<MetaWebhookEventResult> {
+    this.eventInputs.push(input);
+    return this.nextEventResult;
   }
 }
 

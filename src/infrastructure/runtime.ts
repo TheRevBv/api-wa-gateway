@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import { DefaultWebhookDispatchService } from "../application/services/webhook-delivery-service";
+import type { MetaWebhookService } from "../application/ports/meta-webhook-service";
 import { GetConversationUseCase } from "../application/use-cases/get-conversation";
 import { ListConversationMessagesUseCase } from "../application/use-cases/list-conversation-messages";
 import { ListConversationsUseCase } from "../application/use-cases/list-conversations";
@@ -11,6 +12,8 @@ import type { ProviderRuntime } from "../application/ports/whatsapp-provider";
 import type { Environment } from "../config/env";
 import { createDatabaseConnection } from "./database/client";
 import { BaileysWhatsAppProvider } from "./providers/baileys-whatsapp-provider";
+import { DefaultMetaWebhookService } from "./providers/meta-webhook-service";
+import { MetaWhatsAppProvider } from "./providers/meta-whatsapp-provider";
 import { DefaultWhatsAppProviderRegistry } from "./providers/provider-registry";
 import {
   PostgresContactRepository,
@@ -29,6 +32,7 @@ export interface RuntimeServices {
   listConversations: ListConversationsUseCase;
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
+  metaWebhookService: MetaWebhookService;
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
 }
@@ -70,7 +74,12 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     },
     logger
   );
-  const providerRegistry = new DefaultWhatsAppProviderRegistry([baileysProvider]);
+  const metaProvider = new MetaWhatsAppProvider();
+  const metaWebhookService = new DefaultMetaWebhookService(
+    repositories.providerConnections,
+    receiveInboundMessage
+  );
+  const providerRegistry = new DefaultWhatsAppProviderRegistry([baileysProvider, metaProvider]);
 
   return {
     services: {
@@ -78,6 +87,7 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
       listConversations: new ListConversationsUseCase(repositories),
       getConversation: new GetConversationUseCase(repositories),
       listConversationMessages: new ListConversationMessagesUseCase(repositories),
+      metaWebhookService,
       baileysSessionView: baileysProvider,
       baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN
     },

@@ -80,6 +80,7 @@ export class ReceiveInboundMessageUseCase {
           ? null
           : {
               url: input.content.mediaUrl,
+              providerMediaId: input.content.providerMediaId,
               mimeType: input.content.mimeType,
               filename: input.content.fileName,
               caption: input.content.caption
