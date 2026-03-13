@@ -1,3 +1,5 @@
+name: api-wa-gateway
+
 services:
   app:
     image: ${GHCR_IMAGE:?GHCR_IMAGE is required}:${IMAGE_TAG:-main}
