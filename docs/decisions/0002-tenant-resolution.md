@@ -1,21 +1,21 @@
-# ADR 0002: Tenant Resolution Through Provider Connection Context
+# ADR 0002: Resolución de tenant a través del contexto de la conexión del proveedor
 
-## Status
+## Estado
 
-Accepted
+Aprobado
 
-## Decision
+## Decisión
 
-Inbound messages are processed with an explicit `tenantId` injected by the provider adapter from the active `provider_connection`.
+Los mensajes inbound se procesan con un `tenantId` explícito inyectado por el adaptador del proveedor a partir de la `provider_connection` activa.
 
-## Why
+## Por qué
 
-- Baileys does not provide tenant identity directly.
-- The gateway must stay tenant-aware without heuristics based on business payloads.
-- This keeps the application layer independent from provider-specific session details.
+- Baileys no entrega la identidad del tenant de forma directa.
+- El gateway debe mantener conciencia de tenant sin heurísticas basadas en payloads de negocio.
+- Esto mantiene la capa de aplicación independiente de detalles de sesión específicos del proveedor.
 
-## Consequences
+## Consecuencias
 
-- Every active provider connection belongs to exactly one tenant.
-- Inbound processing depends on correct provider connection configuration.
-- Meta can reuse the same internal contract later.
+- Cada conexión activa de proveedor pertenece a un solo tenant.
+- El procesamiento inbound depende de una configuración correcta de `provider_connection`.
+- Meta puede reutilizar después el mismo contrato interno.

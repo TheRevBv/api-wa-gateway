@@ -1,0 +1,20 @@
+services:
+  app:
+    image: ${GHCR_IMAGE:?GHCR_IMAGE is required}:${IMAGE_TAG:-main}
+    restart: unless-stopped
+    env_file:
+      - ${APP_DIR:-/opt/api-wa-gateway}/.env
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - "${APP_DIR:-/opt/api-wa-gateway}/baileys-auth:/app/.baileys-auth"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '3000') + '/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1))\""
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

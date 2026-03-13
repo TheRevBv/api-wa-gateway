@@ -1,39 +1,39 @@
 # api-wa-gateway
 
-WhatsApp API gateway built as a modular monolith with Fastify, PostgreSQL, Drizzle, Zod, Vitest and Pino.
+Gateway de API para WhatsApp construido como un monolito modular con Fastify, PostgreSQL, Drizzle, Zod, Vitest y Pino.
 
-## What is included
+## Qué incluye
 
-- inbound/outbound message orchestration
-- persistence for tenants, contacts, conversations, messages and webhook dispatches
-- tenant-scoped conversation query API
-- webhook routing with signature support and retry inline
-- Baileys adapter for local/dev sessions
-- Meta WhatsApp Cloud API adapter for outbound and inbound webhook processing
+- orquestación de mensajes inbound y outbound
+- persistencia de tenants, contactos, conversaciones, mensajes y despachos de webhooks
+- API de consulta de conversaciones acotada por tenant
+- ruteo de webhooks con soporte de firma y reintento inline
+- adaptador de Baileys para sesiones locales y de desarrollo
+- adaptador de Meta WhatsApp Cloud API para procesamiento inbound y outbound
 
-## Local setup
+## Configuración local
 
-1. Copy `.env.example` to `.env`.
-2. Start PostgreSQL:
+1. Copia `.env.example` a `.env`.
+2. Levanta PostgreSQL:
 
 ```bash
 docker compose --env-file .env -p api-wa-gateway up -d
 ```
 
-3. Install dependencies:
+3. Instala las dependencias:
 
 ```bash
 pnpm install
 ```
 
-4. Run migrations and seed:
+4. Ejecuta migraciones y seed:
 
 ```bash
 pnpm db:migrate
 pnpm db:seed
 ```
 
-5. Start the API:
+5. Inicia la API:
 
 ```bash
 pnpm dev
@@ -47,7 +47,7 @@ pnpm dev
 curl http://localhost:8001/health
 ```
 
-### Send outbound message
+### Enviar mensaje outbound
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/tenants/tenant_demo/messages \
@@ -61,51 +61,51 @@ curl -X POST http://localhost:8001/api/v1/tenants/tenant_demo/messages \
   }'
 ```
 
-### List conversations
+### Listar conversaciones
 
 ```bash
 curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations?limit=20&offset=0"
 ```
 
-### List messages in a conversation
+### Listar mensajes de una conversación
 
 ```bash
 curl "http://localhost:8001/api/v1/tenants/tenant_demo/conversations/<conversation-id>/messages?limit=50&offset=0"
 ```
 
-## Baileys notes
+## Notas de Baileys
 
-- Enable Baileys with `ENABLE_BAILEYS=true`.
-- Set `BAILEYS_DASHBOARD_AUTH_TOKEN` to protect the QR dashboard.
-- On boot, the runtime loads active `provider_connections` with `provider=baileys`.
-- Session auth files are stored under `BAILEYS_AUTH_DIR/<connectionKey>`.
-- QR values are logged by the provider runtime when a new session needs pairing.
-- Web login/QR dashboard:
+- Habilita Baileys con `ENABLE_BAILEYS=true`.
+- Configura `BAILEYS_DASHBOARD_AUTH_TOKEN` para proteger el dashboard del QR.
+- Al arrancar, el runtime carga los `provider_connections` activos con `provider=baileys`.
+- Los archivos de sesión se guardan en `BAILEYS_AUTH_DIR/<connectionKey>`.
+- Los valores del QR se registran en logs cuando una sesión nueva necesita pairing.
+- Acceso web al dashboard/QR:
 
 ```text
 http://localhost:8001/auth/baileys?auth=<BAILEYS_DASHBOARD_AUTH_TOKEN>
 ```
 
-- Optional filters:
+- Filtros opcionales:
 
 ```text
 http://localhost:8001/auth/baileys?auth=<token>&tenantId=tenant_demo
 http://localhost:8001/auth/baileys?auth=<token>&connectionKey=demo-baileys-session
 ```
 
-## Meta Cloud API notes
+## Notas de Meta Cloud API
 
-- Meta uses the existing `provider_connections` table with `provider = 'meta'`.
-- `connection_key` must be the WhatsApp `phone_number_id`.
-- Only one provider connection should stay active per tenant at a time.
-- Meta webhook endpoints:
+- Meta usa la tabla existente `provider_connections` con `provider = 'meta'`.
+- `connection_key` debe ser el `phone_number_id` de WhatsApp.
+- Solo debe existir una conexión de proveedor activa por tenant al mismo tiempo.
+- Endpoints de webhook para Meta:
 
 ```text
 GET  /webhooks/meta/:connectionKey
 POST /webhooks/meta/:connectionKey
 ```
 
-- Required `provider_connections.config` shape for Meta:
+- Forma requerida de `provider_connections.config` para Meta:
 
 ```json
 {
@@ -116,7 +116,7 @@ POST /webhooks/meta/:connectionKey
 }
 ```
 
-- Example SQL after creating the tenant:
+- SQL de ejemplo después de crear el tenant:
 
 ```sql
 UPDATE provider_connections
@@ -134,23 +134,33 @@ SET
 WHERE id = 'provider_connection_acme';
 ```
 
-- Meta sends inbound media references as provider media IDs. The gateway persists those IDs in `message.media.providerMediaId`.
+- Meta envía referencias de media inbound como IDs de media del proveedor. El gateway persiste esos IDs en `message.media.providerMediaId`.
 
-## Testing
+## Pruebas
 
 ```bash
+pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-## Extra tooling
+## CI/CD
+
+- `CI` valida `typecheck`, tests, build de runtime, migraciones sobre PostgreSQL y `docker build` en `pull_request` y `push` a `main`.
+- `Release Image` publica la imagen en GHCR cuando `CI` termina bien sobre `main`.
+- `Deploy Production` hace un despliegue manual a una VM Linux por SSH usando la imagen publicada y `deploy/compose.production.yml`.
+- La guía operativa completa está en `docs/deployment.md`.
+
+## Herramientas extra
 
 - SQL manual para alta de tenant: `scripts/sql/add-tenant.sql`
-- Coleccion Postman: `docs/postman/api-wa-gateway.postman_collection.json`
+- Colección Postman: `docs/postman/api-wa-gateway.postman_collection.json`
 - OpenAPI JSON: `docs/openapi/api-wa-gateway.openapi.json`
+- Guía de despliegue: `docs/deployment.md`
 
-## Provider model
+## Modelo de proveedores
 
-- `ProviderConnection` remains the tenant-provider binding.
-- `BaileysWhatsAppProvider` and `MetaWhatsAppProvider` share the same internal port.
-- Outbound still flows through the same `SendOutboundMessageUseCase`.
-- Inbound still lands in the same `ReceiveInboundMessageUseCase`.
+- `ProviderConnection` sigue siendo el vínculo entre tenant y proveedor.
+- `BaileysWhatsAppProvider` y `MetaWhatsAppProvider` comparten el mismo puerto interno.
+- El flujo outbound sigue pasando por `SendOutboundMessageUseCase`.
+- El flujo inbound sigue entrando por `ReceiveInboundMessageUseCase`.
