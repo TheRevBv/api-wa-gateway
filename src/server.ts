@@ -29,13 +29,21 @@ const start = async (): Promise<void> => {
     void shutdown("SIGTERM");
   });
 
-  await app.listen({
-    host: env.HOST,
-    port: env.PORT
-  });
+  try {
+    await Promise.all(runtime.providerRuntimes.map((providerRuntime) => providerRuntime.start()));
 
-  await Promise.all(runtime.providerRuntimes.map((providerRuntime) => providerRuntime.start()));
-  logger.info({ host: env.HOST, port: env.PORT }, "api-wa-gateway listening");
+    await app.listen({
+      host: env.HOST,
+      port: env.PORT
+    });
+
+    logger.info({ host: env.HOST, port: env.PORT }, "api-wa-gateway listening");
+  } catch (error) {
+    logger.error({ err: error }, "Failed to start api-wa-gateway");
+    await app.close().catch(() => undefined);
+    await runtime.close().catch(() => undefined);
+    process.exit(1);
+  }
 };
 
 void start();
