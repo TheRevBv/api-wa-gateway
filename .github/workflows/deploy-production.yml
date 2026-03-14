@@ -1,10 +1,17 @@
 name: Deploy Production
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: GHCR image tag to deploy in production
+        required: false
+        default: main
+        type: string
   workflow_dispatch:
     inputs:
       image_tag:
-        description: GHCR image tag to deploy
+        description: GHCR image tag to deploy in production
         required: true
         default: main
         type: string
@@ -12,99 +19,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: production
-  cancel-in-progress: false
-
 jobs:
   deploy:
-    name: Deploy to production
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST }}
-      DEPLOY_USER: ${{ secrets.PRODUCTION_SSH_USER }}
-      DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
-      GHCR_USERNAME: ${{ secrets.PRODUCTION_GHCR_USERNAME }}
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment_name: production
+      concurrency_group: deploy-production
+      cancel_in_progress: false
+      app_dir: ${{ vars.PRODUCTION_APP_DIR || '/opt/api-wa-gateway' }}
+      image_tag: ${{ inputs.image_tag }}
+      healthcheck_url: ${{ vars.PRODUCTION_HEALTHCHECK_URL || 'http://127.0.0.1:8001/health' }}
+      ssh_port: ${{ vars.PRODUCTION_SSH_PORT || '22' }}
+      remote_env_file: ${{ vars.PRODUCTION_REMOTE_ENV_FILE }}
+    secrets:
+      VPS_SSH_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+      VPS_HOST: ${{ secrets.PRODUCTION_HOST }}
+      VPS_USER: ${{ secrets.PRODUCTION_SSH_USER }}
       GHCR_TOKEN: ${{ secrets.PRODUCTION_GHCR_TOKEN }}
-      IMAGE_TAG: ${{ inputs.image_tag }}
-      DEPLOY_PORT: ${{ vars.PRODUCTION_SSH_PORT }}
-      APP_DIR: ${{ vars.PRODUCTION_APP_DIR }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Prepare SSH access
-        shell: bash
-        run: |
-          set -euo pipefail
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
-          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> "$HOME/.ssh/known_hosts"
-
-      - name: Create application directory on host
-        shell: bash
-        run: |
-          set -euo pipefail
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          APP_DIR="${APP_DIR:-/opt/api-wa-gateway}"
-          ssh -i "$HOME/.ssh/id_ed25519" -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "mkdir -p '$APP_DIR' '$APP_DIR/baileys-auth'"
-
-      - name: Upload compose file
-        shell: bash
-        run: |
-          set -euo pipefail
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          APP_DIR="${APP_DIR:-/opt/api-wa-gateway}"
-          scp -i "$HOME/.ssh/id_ed25519" -P "$DEPLOY_PORT" deploy/compose.production.yml \
-            "$DEPLOY_USER@$DEPLOY_HOST:$APP_DIR/compose.production.yml"
-
-      - name: Deploy image and run migrations
-        shell: bash
-        env:
-          GHCR_IMAGE: ghcr.io/${{ github.repository }}
-        run: |
-          set -euo pipefail
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          APP_DIR="${APP_DIR:-/opt/api-wa-gateway}"
-          GHCR_IMAGE="${GHCR_IMAGE,,}"
-
-          ssh -i "$HOME/.ssh/id_ed25519" -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            APP_DIR="$APP_DIR" \
-            GHCR_IMAGE="$GHCR_IMAGE" \
-            IMAGE_TAG="$IMAGE_TAG" \
-            GHCR_USERNAME="$GHCR_USERNAME" \
-            GHCR_TOKEN="$GHCR_TOKEN" \
-            /bin/bash -s <<'EOF'
-          set -euo pipefail
-
-          cd "$APP_DIR"
-
-          set -a
-          . "$APP_DIR/.env"
-          set +a
-
-          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-
-          export GHCR_IMAGE IMAGE_TAG
-          docker compose -f compose.production.yml pull app
-          docker compose -f compose.production.yml run --rm app node dist/scripts/migrate.js
-          docker compose -f compose.production.yml up -d app
-
-          PORT_TO_CHECK="${PORT:-3000}"
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error "http://127.0.0.1:${PORT_TO_CHECK}/health" >/dev/null; then
-              exit 0
-            fi
-
-            sleep 3
-          done
-
-          echo "Health check failed for api-wa-gateway on port ${PORT_TO_CHECK}" >&2
-          exit 1
-          EOF
+      GHCR_USER: ${{ secrets.PRODUCTION_GHCR_USERNAME }}

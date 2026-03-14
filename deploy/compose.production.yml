@@ -5,7 +5,7 @@ services:
     image: ${GHCR_IMAGE:?GHCR_IMAGE is required}:${IMAGE_TAG:-main}
     restart: unless-stopped
     env_file:
-      - ${APP_DIR:-/opt/api-wa-gateway}/.env
+      - ${APP_ENV_FILE:?APP_ENV_FILE is required}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
     volumes:

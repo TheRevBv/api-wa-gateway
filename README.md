@@ -146,8 +146,9 @@ pnpm build
 
 ## CI/CD
 
-- `CI` valida `typecheck`, tests, build de runtime, migraciones sobre PostgreSQL y `docker build` en `pull_request` y `push` a `main`.
-- `Release Image` publica la imagen en GHCR cuando `CI` termina bien sobre `main`.
+- `CI` valida `typecheck`, tests, build de runtime, migraciones sobre PostgreSQL y `docker build` en `pull_request`.
+- `Build & Push (GHCR)` valida, construye y publica la imagen en GHCR en `main`, `develop` y tags `v*.*.*`.
+- `Deploy Dev` ocurre automáticamente después del publish cuando el push entra a `develop`.
 - `Deploy Production` hace un despliegue manual a una VM Linux por SSH usando la imagen publicada y `deploy/compose.production.yml`.
 - La guía operativa completa está en `docs/deployment.md`.
 
