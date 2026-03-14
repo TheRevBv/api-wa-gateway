@@ -203,11 +203,36 @@ jobs:
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" pull app
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" run --rm app node dist/scripts/migrate.js
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" up -d --remove-orphans app
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" ps -a
+
+          container_id="$(docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" ps -q app)"
+
+          if [ -z "$container_id" ]; then
+            echo "App container was not created" >&2
+            exit 1
+          fi
 
           sleep "$DEPLOY_WAIT_SECONDS"
 
           for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error "$HEALTHCHECK_URL" >/dev/null; then
+            container_status="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+            container_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)"
+
+            if [ "$container_status" != "running" ]; then
+              echo "App container is not running: $container_status" >&2
+              docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" ps -a >&2 || true
+              docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" logs --tail=200 app >&2 || true
+              exit 1
+            fi
+
+            if [ "$container_health" = "unhealthy" ]; then
+              echo "App container is unhealthy" >&2
+              docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" logs --tail=200 app >&2 || true
+              exit 1
+            fi
+
+            if { [ "$container_health" = "healthy" ] || [ "$container_health" = "none" ]; } && \
+              curl --fail --silent --show-error "$HEALTHCHECK_URL" >/dev/null; then
               docker image prune -f >/dev/null 2>&1 || true
               exit 0
             fi
@@ -216,5 +241,7 @@ jobs:
           done
 
           echo "Health check failed: $HEALTHCHECK_URL" >&2
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" ps -a >&2 || true
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" logs --tail=200 app >&2 || true
           exit 1
           SCRIPT

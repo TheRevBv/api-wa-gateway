@@ -1,15 +1,15 @@
-name: api-wa-gateway
+name: api-wa-gateway-develop
 
 services:
   app:
-    image: ${GHCR_IMAGE:-ghcr.io/therevbv/api-wa-gateway}:${IMAGE_TAG:-main}
+    image: ${GHCR_IMAGE:-ghcr.io/therevbv/api-wa-gateway}:${IMAGE_TAG:-develop}
     restart: unless-stopped
     env_file:
       - ${APP_ENV_FILE:-.env}
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
     volumes:
-      - "${APP_DIR:-/opt/api-wa-gateway}/baileys-auth:/app/.baileys-auth"
+      - "${APP_DIR:-/opt/api-wa-gateway-dev}/baileys-auth:/app/.baileys-auth"
     healthcheck:
       test:
         [

@@ -30,7 +30,7 @@ jobs:
       image_tag: ${{ inputs.image_tag }}
       healthcheck_url: ${{ vars.PRODUCTION_HEALTHCHECK_URL || 'http://127.0.0.1:8001/health' }}
       ssh_port: ${{ vars.PRODUCTION_SSH_PORT || '22' }}
-      remote_env_file: ${{ vars.PRODUCTION_REMOTE_ENV_FILE }}
+      remote_env_file: ${{ vars.PRODUCTION_REMOTE_ENV_FILE || '/opt/api-wa-gateway/.env' }}
     secrets:
       VPS_SSH_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
       VPS_HOST: ${{ secrets.PRODUCTION_HOST }}
