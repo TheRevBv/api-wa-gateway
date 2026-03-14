@@ -1,42 +1,42 @@
-# Architecture
+# Arquitectura
 
-`api-wa-gateway` is a modular monolith with five top-level layers:
+`api-wa-gateway` es un monolito modular con cinco capas principales:
 
-- `src/domain`: entities and domain enums with no dependency on Fastify, Drizzle or Baileys.
-- `src/application`: use cases, repository ports, provider ports and webhook dispatch orchestration.
-- `src/infrastructure`: PostgreSQL/Drizzle repositories, webhook HTTP client, provider adapters and runtime composition.
-- `src/interfaces/http`: Fastify routes, request validation and response presenters.
-- `tests`: unit and HTTP tests with in-memory fakes.
+- `src/domain`: entidades y enums de dominio sin dependencia de Fastify, Drizzle o Baileys.
+- `src/application`: casos de uso, puertos de repositorio, puertos de proveedor y orquestación de despachos a webhooks.
+- `src/infrastructure`: repositorios de PostgreSQL/Drizzle, cliente HTTP de webhooks, adaptadores de proveedor y composición del runtime.
+- `src/interfaces/http`: rutas de Fastify, validación de requests y presenters de respuesta.
+- `tests`: pruebas unitarias y HTTP con implementaciones en memoria.
 
-## Main modules
+## Módulos principales
 
-- `tenants`: tenant lookup and activation checks.
-- `messaging`: contacts, conversations, messages and query APIs.
-- `providers`: outbound provider dispatch and inbound normalization.
-- `webhooks`: tenant webhook resolution, signature generation and dispatch auditing.
+- `tenants`: búsqueda de tenants y verificación de activación.
+- `messaging`: contactos, conversaciones, mensajes y APIs de consulta.
+- `providers`: despacho outbound a proveedores y normalización inbound.
+- `webhooks`: resolución de webhook por tenant, generación de firma y auditoría de despachos.
 
-## MVP flow
+## Flujo del MVP
 
 ### Inbound
 
-1. Baileys receives an event for an active `provider_connection`.
-2. The Baileys adapter resolves `tenantId` from the connection context.
-3. `ReceiveInboundMessageUseCase` finds or creates contact and conversation.
-4. The message is persisted with the normalized payload plus raw provider payload.
-5. `DefaultWebhookDispatchService` resolves the active webhook subscription and dispatches a standard payload.
-6. The webhook dispatch result is stored in `webhook_dispatches`.
+1. Baileys recibe un evento para una `provider_connection` activa.
+2. El adaptador de Baileys resuelve `tenantId` desde el contexto de la conexión.
+3. `ReceiveInboundMessageUseCase` encuentra o crea el contacto y la conversación.
+4. El mensaje se persiste con el payload normalizado y el payload crudo del proveedor.
+5. `DefaultWebhookDispatchService` resuelve la suscripción de webhook activa y despacha un payload estándar.
+6. El resultado del despacho se guarda en `webhook_dispatches`.
 
 ### Outbound
 
-1. `POST /api/v1/tenants/:tenantId/messages` validates the request with Zod.
-2. `SendOutboundMessageUseCase` resolves the active provider connection for the tenant.
-3. The provider adapter sends the message.
-4. The outbound message is persisted and linked to the conversation.
+1. `POST /api/v1/tenants/:tenantId/messages` valida el request con Zod.
+2. `SendOutboundMessageUseCase` resuelve la conexión activa del proveedor para el tenant.
+3. El adaptador del proveedor envía el mensaje.
+4. El mensaje outbound se persiste y se vincula a la conversación.
 
-## Operational assumptions
+## Supuestos operativos
 
-- One active provider connection per tenant in the MVP.
-- One active webhook subscription per tenant in the MVP.
-- One conversation per `(tenantId, contactId, channel)` in the MVP.
-- Supported message types: `text`, `image`, `document`.
-- Media outbound is URL-based only.
+- Una conexión de proveedor activa por tenant en el MVP.
+- Una suscripción de webhook activa por tenant en el MVP.
+- Una conversación por `(tenantId, contactId, channel)` en el MVP.
+- Tipos de mensaje soportados: `text`, `image`, `document`.
+- El envío outbound de media es solo basado en URL.

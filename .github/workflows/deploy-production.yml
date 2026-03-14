@@ -1,0 +1,39 @@
+name: Deploy Production
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: GHCR image tag to deploy in production
+        required: false
+        default: main
+        type: string
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: GHCR image tag to deploy in production
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment_name: production
+      concurrency_group: deploy-production
+      cancel_in_progress: false
+      app_dir: ${{ vars.PRODUCTION_APP_DIR || '/opt/api-wa-gateway' }}
+      image_tag: ${{ inputs.image_tag }}
+      healthcheck_url: ${{ vars.PRODUCTION_HEALTHCHECK_URL || 'http://127.0.0.1:8001/health' }}
+      ssh_port: ${{ vars.PRODUCTION_SSH_PORT || '22' }}
+      remote_env_file: ${{ vars.PRODUCTION_REMOTE_ENV_FILE }}
+    secrets:
+      VPS_SSH_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+      VPS_HOST: ${{ secrets.PRODUCTION_HOST }}
+      VPS_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+      GHCR_TOKEN: ${{ secrets.PRODUCTION_GHCR_TOKEN }}
+      GHCR_USER: ${{ secrets.PRODUCTION_GHCR_USERNAME }}

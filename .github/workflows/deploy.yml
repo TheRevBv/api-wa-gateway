@@ -1,0 +1,220 @@
+name: Deploy Reusable
+
+on:
+  workflow_call:
+    inputs:
+      environment_name:
+        description: GitHub environment name
+        required: true
+        type: string
+      concurrency_group:
+        description: Concurrency group for the deploy
+        required: true
+        type: string
+      cancel_in_progress:
+        description: Cancel in-progress deploys for the same group
+        required: false
+        default: false
+        type: boolean
+      app_dir:
+        description: Remote application directory
+        required: true
+        type: string
+      image_tag:
+        description: GHCR image tag to deploy
+        required: true
+        type: string
+      healthcheck_url:
+        description: URL to validate after deploy
+        required: true
+        type: string
+      ssh_port:
+        description: SSH port for the remote host
+        required: false
+        default: "22"
+        type: string
+      local_compose_file:
+        description: Compose file path inside the repository
+        required: false
+        default: deploy/compose.production.yml
+        type: string
+      remote_compose_file:
+        description: Compose filename on the remote host
+        required: false
+        default: compose.production.yml
+        type: string
+      remote_env_file:
+        description: Remote environment file path
+        required: false
+        default: ""
+        type: string
+      deploy_wait_seconds:
+        description: Seconds to wait before health checks
+        required: false
+        default: "5"
+        type: string
+    secrets:
+      VPS_SSH_KEY:
+        required: true
+      VPS_HOST:
+        required: true
+      VPS_USER:
+        required: true
+      GHCR_TOKEN:
+        required: true
+      GHCR_USER:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment_name }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    concurrency:
+      group: ${{ inputs.concurrency_group }}
+      cancel-in-progress: ${{ inputs.cancel_in_progress }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Resolve deploy settings
+        id: config
+        shell: bash
+        env:
+          INPUT_APP_DIR: ${{ inputs.app_dir }}
+          INPUT_REMOTE_ENV_FILE: ${{ inputs.remote_env_file }}
+          INPUT_REMOTE_COMPOSE_FILE: ${{ inputs.remote_compose_file }}
+          INPUT_SSH_PORT: ${{ inputs.ssh_port }}
+          INPUT_DEPLOY_WAIT_SECONDS: ${{ inputs.deploy_wait_seconds }}
+          INPUT_GHCR_USER: ${{ secrets.GHCR_USER }}
+        run: |
+          set -euo pipefail
+
+          app_dir="$INPUT_APP_DIR"
+          remote_env_file="$INPUT_REMOTE_ENV_FILE"
+          remote_compose_file="$INPUT_REMOTE_COMPOSE_FILE"
+          ssh_port="$INPUT_SSH_PORT"
+          deploy_wait_seconds="$INPUT_DEPLOY_WAIT_SECONDS"
+          ghcr_user="$INPUT_GHCR_USER"
+
+          if [ -z "$remote_env_file" ]; then
+            remote_env_file="$app_dir/.env"
+          fi
+
+          if [ -z "$remote_compose_file" ]; then
+            remote_compose_file="compose.production.yml"
+          fi
+
+          if [ -z "$ssh_port" ]; then
+            ssh_port="22"
+          fi
+
+          if [ -z "$deploy_wait_seconds" ]; then
+            deploy_wait_seconds="5"
+          fi
+
+          if [ -z "$ghcr_user" ]; then
+            ghcr_user="${GITHUB_REPOSITORY_OWNER,,}"
+          fi
+
+          {
+            echo "app_dir=$app_dir"
+            echo "remote_env_file=$remote_env_file"
+            echo "remote_compose_file=$remote_compose_file"
+            echo "ssh_port=$ssh_port"
+            echo "deploy_wait_seconds=$deploy_wait_seconds"
+            echo "ghcr_user=$ghcr_user"
+            echo "ghcr_image=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Add known_hosts entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan -H -p "${{ steps.config.outputs.ssh_port }}" "${{ secrets.VPS_HOST }}" >> "$HOME/.ssh/known_hosts"
+
+      - name: Prepare remote directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${{ steps.config.outputs.ssh_port }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p '${{ steps.config.outputs.app_dir }}' '${{ steps.config.outputs.app_dir }}/baileys-auth' && \
+             if [ -f '${{ steps.config.outputs.app_dir }}/${{ steps.config.outputs.remote_compose_file }}' ]; then \
+               cp '${{ steps.config.outputs.app_dir }}/${{ steps.config.outputs.remote_compose_file }}' \
+                  '${{ steps.config.outputs.app_dir }}/${{ steps.config.outputs.remote_compose_file }}.backup-'\"\$(date +%Y%m%d-%H%M%S)\"; \
+             fi"
+
+      - name: Upload compose file
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -P "${{ steps.config.outputs.ssh_port }}" "${{ inputs.local_compose_file }}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ steps.config.outputs.app_dir }}/${{ steps.config.outputs.remote_compose_file }}"
+
+      - name: Deploy remotely
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -p "${{ steps.config.outputs.ssh_port }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            bash -s -- \
+            "${{ secrets.GHCR_TOKEN }}" \
+            "${{ steps.config.outputs.ghcr_user }}" \
+            "${{ steps.config.outputs.ghcr_image }}" \
+            "${{ steps.config.outputs.app_dir }}" \
+            "${{ steps.config.outputs.remote_env_file }}" \
+            "${{ steps.config.outputs.remote_compose_file }}" \
+            "${{ inputs.image_tag }}" \
+            "${{ inputs.healthcheck_url }}" \
+            "${{ steps.config.outputs.deploy_wait_seconds }}" <<'SCRIPT'
+          set -euo pipefail
+
+          GHCR_TOKEN="$1"
+          GHCR_USER="$2"
+          GHCR_IMAGE="$3"
+          APP_DIR="$4"
+          REMOTE_ENV_FILE="$5"
+          REMOTE_COMPOSE_FILE="$6"
+          IMAGE_TAG="$7"
+          HEALTHCHECK_URL="$8"
+          DEPLOY_WAIT_SECONDS="$9"
+
+          cd "$APP_DIR"
+
+          if [ ! -f "$REMOTE_ENV_FILE" ]; then
+            echo "Missing remote env file: $REMOTE_ENV_FILE" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+          export GHCR_IMAGE IMAGE_TAG APP_DIR APP_ENV_FILE="$REMOTE_ENV_FILE"
+
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" pull app
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" run --rm app node dist/scripts/migrate.js
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" up -d --remove-orphans app
+
+          sleep "$DEPLOY_WAIT_SECONDS"
+
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error "$HEALTHCHECK_URL" >/dev/null; then
+              docker image prune -f >/dev/null 2>&1 || true
+              exit 0
+            fi
+
+            sleep 3
+          done
+
+          echo "Health check failed: $HEALTHCHECK_URL" >&2
+          exit 1
+          SCRIPT

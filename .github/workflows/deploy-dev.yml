@@ -1,0 +1,39 @@
+name: Deploy Dev
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: GHCR image tag to deploy in dev
+        required: false
+        default: develop
+        type: string
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: GHCR image tag to deploy in dev
+        required: true
+        default: develop
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment_name: dev
+      concurrency_group: deploy-dev
+      cancel_in_progress: true
+      app_dir: ${{ vars.DEV_APP_DIR || '/opt/api-wa-gateway-dev' }}
+      image_tag: ${{ inputs.image_tag }}
+      healthcheck_url: ${{ vars.DEV_HEALTHCHECK_URL || 'http://127.0.0.1:8001/health' }}
+      ssh_port: ${{ vars.DEV_SSH_PORT || '22' }}
+      remote_env_file: ${{ vars.DEV_REMOTE_ENV_FILE }}
+    secrets:
+      VPS_SSH_KEY: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+      VPS_HOST: ${{ secrets.DEV_HOST }}
+      VPS_USER: ${{ secrets.DEV_SSH_USER }}
+      GHCR_TOKEN: ${{ secrets.DEV_GHCR_TOKEN }}
+      GHCR_USER: ${{ secrets.DEV_GHCR_USERNAME }}
