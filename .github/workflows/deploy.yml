@@ -201,7 +201,7 @@ jobs:
           export GHCR_IMAGE IMAGE_TAG APP_DIR APP_ENV_FILE="$REMOTE_ENV_FILE"
 
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" pull app
-          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" run --rm app node dist/scripts/migrate.js
+          docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" run --rm -T app node dist/scripts/migrate.js </dev/null
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" up -d --remove-orphans app
           docker compose --env-file "$REMOTE_ENV_FILE" -f "$REMOTE_COMPOSE_FILE" ps -a
 
