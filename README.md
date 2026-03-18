@@ -116,6 +116,26 @@ POST /webhooks/meta/:connectionKey
 }
 ```
 
+- Para entorno local también puedes sincronizar la conexión Meta desde `.env`:
+
+```bash
+pnpm provider:sync:meta
+```
+
+- Variables mínimas para ese flujo:
+
+```text
+META_TENANT_ID=tenant_demo
+META_PHONE_NUMBER_ID=<PHONE_NUMBER_ID>
+META_ACCESS_TOKEN=<META_ACCESS_TOKEN>
+META_VERIFY_TOKEN=<TOKEN_QUE_TU_DEFINES_EN_META>
+META_APP_SECRET=<APP_SECRET_DE_TU_FACEBOOK_APP>
+META_API_VERSION=v23.0
+META_ACTIVATE=true
+```
+
+- `pnpm provider:sync:meta` actualiza o crea `provider_connections.provider='meta'` para el tenant indicado y, si `META_ACTIVATE=true`, desactiva cualquier otra conexión activa del mismo tenant.
+
 - SQL de ejemplo después de crear el tenant:
 
 ```sql

@@ -13,7 +13,20 @@ const environmentSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   BAILEYS_AUTH_DIR: z.string().default(".baileys-auth"),
-  BAILEYS_DASHBOARD_AUTH_TOKEN: z.string().default("")
+  BAILEYS_DASHBOARD_AUTH_TOKEN: z.string().default(""),
+  META_TENANT_ID: z.string().default("tenant_demo"),
+  META_PROVIDER_CONNECTION_ID: z.string().default("meta_demo_connection"),
+  META_PROVIDER_DISPLAY_NAME: z.string().default("Local Meta Cloud API"),
+  META_PHONE_NUMBER_ID: z.string().default(""),
+  META_ACCESS_TOKEN: z.string().default(""),
+  META_VERIFY_TOKEN: z.string().default(""),
+  META_APP_SECRET: z.string().default(""),
+  META_API_VERSION: z.string().default("v23.0"),
+  META_BASE_URL: z.url().default("https://graph.facebook.com"),
+  META_ACTIVATE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true")
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
