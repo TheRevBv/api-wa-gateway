@@ -102,4 +102,53 @@ describe("ReceiveInboundMessageUseCase", () => {
       statusCode: 404
     });
   });
+
+  it("reuses a legacy outbound conversation when Meta inbound arrives with the wa_id variant", async () => {
+    const repositories = new InMemoryRepositoryBundle();
+    const webhookDispatchService = new RecordingWebhookDispatchService();
+    repositories.tenants.set(createTenant());
+    repositories.conversations.listByTenant = repositories.listConversations.bind(repositories);
+
+    const contact = await repositories.contacts.create({
+      id: "contact-1",
+      tenantId: "tenant-1",
+      phone: "524792348066",
+      displayName: null,
+      providerContactId: null
+    });
+    const conversation = await repositories.conversations.create({
+      id: "conversation-1",
+      tenantId: "tenant-1",
+      contactId: contact.id,
+      channel: "whatsapp",
+      status: "active",
+      startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      lastMessageAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+
+    const useCase = new ReceiveInboundMessageUseCase(repositories, webhookDispatchService);
+
+    const result = await useCase.execute({
+      tenantId: "tenant-1",
+      provider: "meta",
+      providerMessageId: "provider-message-meta-1",
+      providerContactId: "5214792348066",
+      from: "5214792348066",
+      displayName: "Josh",
+      content: {
+        type: "text",
+        text: "hola inbound"
+      },
+      payloadRaw: {
+        raw: true
+      },
+      receivedAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+
+    expect(result.contact.id).toBe(contact.id);
+    expect(result.conversation.id).toBe(conversation.id);
+    expect(repositories.contacts.all()).toHaveLength(1);
+    expect(repositories.conversations.all()).toHaveLength(1);
+    expect(repositories.messages.all()).toHaveLength(1);
+  });
 });

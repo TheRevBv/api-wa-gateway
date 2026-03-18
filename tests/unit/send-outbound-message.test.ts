@@ -73,6 +73,31 @@ describe("SendOutboundMessageUseCase", () => {
     expect(result.message.media).toBeNull();
   });
 
+  it("normalizes Mexico Meta recipient numbers before creating the contact identity", async () => {
+    const repositories = new InMemoryRepositoryBundle();
+    repositories.tenants.set(createTenant());
+    repositories.providerConnections.set(createProviderConnection({ provider: "meta" }));
+    repositories.conversations.listByTenant = repositories.listConversations.bind(repositories);
+
+    const provider = new FakeWhatsAppProvider();
+    const useCase = new SendOutboundMessageUseCase(
+      repositories,
+      new FakeWhatsAppProviderRegistry(provider)
+    );
+
+    const result = await useCase.execute({
+      tenantId: "tenant-1",
+      to: "524792348066",
+      content: {
+        type: "text",
+        text: "hola outbound"
+      }
+    });
+
+    expect(result.contact.phone).toBe("5214792348066");
+    expect(repositories.contacts.all()).toHaveLength(1);
+  });
+
   it("fails when there is no provider connection", async () => {
     const repositories = new InMemoryRepositoryBundle();
     repositories.tenants.set(createTenant());

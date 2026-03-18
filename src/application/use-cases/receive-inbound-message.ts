@@ -6,6 +6,7 @@ import type { RepositoryBundle } from "../ports/repositories";
 import type { InboundProviderMessage } from "../ports/whatsapp-provider";
 import type { WebhookDispatchService } from "../ports/webhook-dispatcher";
 import { createId } from "../services/id";
+import { getWhatsAppPhoneLookupCandidates, normalizeWhatsAppPhone } from "../services/normalize-whatsapp-phone";
 
 export interface ReceiveInboundMessageResult {
   contact: Contact;
@@ -46,7 +47,7 @@ export class ReceiveInboundMessageUseCase {
         });
       }
 
-      const contact = await this.repositories.contacts.findByTenantAndPhone(input.tenantId, input.from);
+      const contact = await this.findContactByPhone(input.tenantId, input.from);
 
       if (!contact) {
         throw new ApplicationError("Contact for duplicated message was not found", {
@@ -114,13 +115,13 @@ export class ReceiveInboundMessageUseCase {
   }
 
   private async findOrCreateContact(input: InboundProviderMessage): Promise<Contact> {
-    const existingContact = await this.repositories.contacts.findByTenantAndPhone(input.tenantId, input.from);
+    const existingContact = await this.findContactByPhone(input.tenantId, input.from);
 
     if (!existingContact) {
       return this.repositories.contacts.create({
         id: createId(),
         tenantId: input.tenantId,
-        phone: input.from,
+        phone: normalizeWhatsAppPhone(input.from),
         displayName: input.displayName,
         providerContactId: input.providerContactId
       });
@@ -138,6 +139,18 @@ export class ReceiveInboundMessageUseCase {
     }
 
     return existingContact;
+  }
+
+  private async findContactByPhone(tenantId: string, phone: string): Promise<Contact | null> {
+    for (const candidate of getWhatsAppPhoneLookupCandidates(phone)) {
+      const existingContact = await this.repositories.contacts.findByTenantAndPhone(tenantId, candidate);
+
+      if (existingContact) {
+        return existingContact;
+      }
+    }
+
+    return null;
   }
 
   private async findOrCreateConversation(

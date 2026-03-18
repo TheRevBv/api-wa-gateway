@@ -5,6 +5,7 @@ import { ApplicationError } from "../errors/application-error";
 import type { RepositoryBundle, SendMessageInput } from "../ports/repositories";
 import type { WhatsAppProviderRegistry } from "../ports/whatsapp-provider";
 import { createId } from "../services/id";
+import { getWhatsAppPhoneLookupCandidates, normalizeWhatsAppPhone } from "../services/normalize-whatsapp-phone";
 
 export interface SendOutboundMessageResult {
   contact: Contact;
@@ -176,7 +177,7 @@ export class SendOutboundMessageUseCase {
   }
 
   private async findOrCreateContact(tenantId: string, phone: string): Promise<Contact> {
-    const existingContact = await this.repositories.contacts.findByTenantAndPhone(tenantId, phone);
+    const existingContact = await this.findContactByPhone(tenantId, phone);
 
     if (existingContact) {
       return existingContact;
@@ -185,10 +186,22 @@ export class SendOutboundMessageUseCase {
     return this.repositories.contacts.create({
       id: createId(),
       tenantId,
-      phone,
+      phone: normalizeWhatsAppPhone(phone),
       displayName: null,
       providerContactId: null
     });
+  }
+
+  private async findContactByPhone(tenantId: string, phone: string): Promise<Contact | null> {
+    for (const candidate of getWhatsAppPhoneLookupCandidates(phone)) {
+      const existingContact = await this.repositories.contacts.findByTenantAndPhone(tenantId, candidate);
+
+      if (existingContact) {
+        return existingContact;
+      }
+    }
+
+    return null;
   }
 
   private async findOrCreateConversation(tenantId: string, contactId: string): Promise<Conversation> {
