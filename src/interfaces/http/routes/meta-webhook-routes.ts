@@ -51,6 +51,7 @@ export const registerMetaWebhookRoutes = (
     return reply.status(200).send({
       received: true,
       processedMessages: result.processedMessages,
+      processedStatuses: result.processedStatuses,
       ignoredEvents: result.ignoredEvents
     });
   });

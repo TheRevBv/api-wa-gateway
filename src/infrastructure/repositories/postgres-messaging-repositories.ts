@@ -8,6 +8,27 @@ import type {
 import type { DatabaseClient } from "../database/client";
 import { contactsTable, conversationsTable, messagesTable } from "../database/schema";
 
+const appendProviderStatusEvent = (current: unknown, event: unknown): unknown => {
+  if (event === undefined) {
+    return current;
+  }
+
+  if (typeof current === "object" && current !== null && !Array.isArray(current)) {
+    const record = current as Record<string, unknown>;
+    const existingEvents = Array.isArray(record.providerStatusEvents) ? record.providerStatusEvents : [];
+
+    return {
+      ...record,
+      providerStatusEvents: [...existingEvents, event]
+    };
+  }
+
+  return {
+    initialPayloadRaw: current,
+    providerStatusEvents: [event]
+  };
+};
+
 export class PostgresContactRepository implements ContactRepository {
   constructor(private readonly db: DatabaseClient) {}
 
@@ -181,7 +202,7 @@ export class PostgresMessageRepository implements MessageRepository {
     provider: "baileys" | "meta";
     providerMessageId: string | null;
     direction: "inbound" | "outbound";
-    type: "text" | "image" | "document";
+    type: "text" | "image" | "document" | "template";
     body: string | null;
     media: {
       url: string;
@@ -190,7 +211,7 @@ export class PostgresMessageRepository implements MessageRepository {
       caption?: string;
     } | null;
     payloadRaw: unknown;
-    status: "received" | "sent" | "failed";
+    status: "received" | "accepted" | "sent" | "delivered" | "read" | "failed";
     sentAt: Date | null;
     receivedAt: Date | null;
   }) {
@@ -203,6 +224,37 @@ export class PostgresMessageRepository implements MessageRepository {
       .returning();
 
     return message;
+  }
+
+  async updateStatusByProviderMessageId(input: {
+    tenantId: string;
+    provider: "baileys" | "meta";
+    providerMessageId: string;
+    status: "received" | "accepted" | "sent" | "delivered" | "read" | "failed";
+    sentAt?: Date | null;
+    payloadRaw?: unknown;
+  }) {
+    const existing = await this.findByProviderMessageId(
+      input.tenantId,
+      input.provider,
+      input.providerMessageId
+    );
+
+    if (!existing) {
+      return null;
+    }
+
+    const [message] = await this.db
+      .update(messagesTable)
+      .set({
+        status: input.status,
+        sentAt: input.sentAt ?? existing.sentAt,
+        payloadRaw: appendProviderStatusEvent(existing.payloadRaw, input.payloadRaw)
+      })
+      .where(eq(messagesTable.id, existing.id))
+      .returning();
+
+    return message ?? null;
   }
 
   async listByConversation(tenantId: string, conversationId: string, query: { limit: number; offset: number }) {

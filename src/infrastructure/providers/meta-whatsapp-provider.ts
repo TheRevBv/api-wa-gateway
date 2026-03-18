@@ -13,7 +13,8 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
       return {
         type: "text",
         text: {
-          body: command.content.text
+          body: command.content.text,
+          ...(command.content.previewUrl !== undefined ? { preview_url: command.content.previewUrl } : {})
         }
       };
     case "image":
@@ -47,6 +48,16 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
           ...(command.content.fileName ? { filename: command.content.fileName } : {})
         }
       };
+    case "template":
+      return {
+        type: "template",
+        template: {
+          name: command.content.name,
+          language: {
+            code: command.content.languageCode ?? "en_US"
+          }
+        }
+      };
   }
 };
 
@@ -69,7 +80,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     return {
       providerMessageId: response.messageId,
       payloadRaw: response.payloadRaw,
-      status: "sent",
+      status: response.messageStatus ?? "sent",
       sentAt: new Date()
     };
   }

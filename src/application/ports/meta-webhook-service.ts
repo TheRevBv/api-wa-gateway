@@ -14,6 +14,7 @@ export interface MetaWebhookEventInput {
 
 export interface MetaWebhookEventResult {
   processedMessages: number;
+  processedStatuses: number;
   ignoredEvents: number;
 }
 

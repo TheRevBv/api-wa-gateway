@@ -21,7 +21,7 @@ const environmentSchema = z.object({
   META_ACCESS_TOKEN: z.string().default(""),
   META_VERIFY_TOKEN: z.string().default(""),
   META_APP_SECRET: z.string().default(""),
-  META_API_VERSION: z.string().default("v23.0"),
+  META_API_VERSION: z.string().default("v25.0"),
   META_BASE_URL: z.url().default("https://graph.facebook.com"),
   META_ACTIVATE: z
     .enum(["true", "false"])

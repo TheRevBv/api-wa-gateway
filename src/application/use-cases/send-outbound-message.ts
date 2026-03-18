@@ -13,10 +13,14 @@ export interface SendOutboundMessageResult {
 }
 
 const toOutboundBody = (input: SendMessageInput): string | null =>
-  input.content.type === "text" ? input.content.text : input.content.caption ?? null;
+  input.content.type === "text"
+    ? input.content.text
+    : input.content.type === "template"
+      ? input.content.name
+      : input.content.caption ?? null;
 
 const toOutboundMedia = (input: SendMessageInput): Message["media"] =>
-  input.content.type === "text"
+  input.content.type === "text" || input.content.type === "template"
     ? null
     : {
         url: input.content.mediaUrl,
@@ -152,7 +156,7 @@ export class SendOutboundMessageUseCase {
       body: toOutboundBody(input),
       media: toOutboundMedia(input),
       payloadRaw: providerResult.payloadRaw,
-      status: "sent",
+      status: providerResult.status,
       sentAt: providerResult.sentAt ?? attemptedAt,
       receivedAt: null
     });

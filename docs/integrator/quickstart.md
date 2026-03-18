@@ -57,7 +57,8 @@ curl -X POST https://gateway.midominio.com/api/v1/tenants/tenant_acme/messages \
     "to": "5215512345678",
     "content": {
       "type": "text",
-      "text": "hola desde mi sistema"
+      "text": "hola desde mi sistema",
+      "previewUrl": true
     }
   }'
 ```
@@ -160,6 +161,9 @@ En esta fase, el gateway soporta estos tipos outbound:
 - `text`
 - `image`
 - `document`
+- `template`
+
+Si usas Meta Cloud API en entorno de prueba, normalmente conviene probar primero con un template aprobado como `hello_world`.
 
 ## Qué pasa cuando entra un mensaje inbound
 

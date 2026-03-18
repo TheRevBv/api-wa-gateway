@@ -34,7 +34,8 @@ describe("MetaWhatsAppProvider", () => {
       to: "5215512345678",
       content: {
         type: "text",
-        text: "hola meta"
+        text: "hola meta",
+        previewUrl: true
       }
     });
 
@@ -47,7 +48,8 @@ describe("MetaWhatsAppProvider", () => {
       to: "5215512345678",
       type: "text",
       text: {
-        body: "hola meta"
+        body: "hola meta",
+        preview_url: true
       }
     });
     expect(result.providerMessageId).toBe("wamid.123");
@@ -145,5 +147,57 @@ describe("MetaWhatsAppProvider", () => {
       statusCode: 502,
       message: "Meta rejected the outbound message: Unsupported post request"
     });
+  });
+
+  it("maps template messages and preserves accepted provider status", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          messages: [{ id: "wamid.template-1", message_status: "accepted" }]
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      )
+    );
+    const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
+
+    const result = await provider.sendMessage({
+      connection: createProviderConnection({
+        provider: "meta",
+        connectionKey: "1234567890",
+        config: {
+          accessToken: "meta-token",
+          verifyToken: "verify-token",
+          appSecret: "app-secret",
+          apiVersion: "v25.0"
+        }
+      }),
+      to: "5215512345678",
+      content: {
+        type: "template",
+        name: "hello_world",
+        languageCode: "en_US"
+      }
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: "5215512345678",
+      type: "template",
+      template: {
+        name: "hello_world",
+        language: {
+          code: "en_US"
+        }
+      }
+    });
+    expect(result.providerMessageId).toBe("wamid.template-1");
+    expect(result.status).toBe("accepted");
   });
 });

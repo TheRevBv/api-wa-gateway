@@ -50,7 +50,7 @@ export interface ProviderSendMessageCommand {
 export interface ProviderSendMessageResult {
   providerMessageId: string | null;
   payloadRaw: unknown;
-  status: "sent" | "failed";
+  status: "accepted" | "sent" | "failed";
   sentAt: Date | null;
 }
 

@@ -94,6 +94,14 @@ export interface MessageRepository {
     sentAt: Date | null;
     receivedAt: Date | null;
   }): Promise<Message>;
+  updateStatusByProviderMessageId(input: {
+    tenantId: string;
+    provider: ProviderName;
+    providerMessageId: string;
+    status: MessageStatus;
+    sentAt?: Date | null;
+    payloadRaw?: unknown;
+  }): Promise<Message | null>;
   listByConversation(
     tenantId: string,
     conversationId: string,

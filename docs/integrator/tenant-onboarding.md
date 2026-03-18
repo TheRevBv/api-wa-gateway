@@ -89,7 +89,7 @@ Para Meta, `provider_connections.config` debe incluir:
   "accessToken": "EAA...",
   "verifyToken": "mi-verify-token",
   "appSecret": "mi-app-secret",
-  "apiVersion": "v23.0"
+  "apiVersion": "v25.0"
 }
 ```
 

@@ -112,7 +112,7 @@ POST /webhooks/meta/:connectionKey
   "accessToken": "EAA...",
   "verifyToken": "my-verify-token",
   "appSecret": "my-app-secret",
-  "apiVersion": "v23.0"
+  "apiVersion": "v25.0"
 }
 ```
 
@@ -130,7 +130,7 @@ META_PHONE_NUMBER_ID=<PHONE_NUMBER_ID>
 META_ACCESS_TOKEN=<META_ACCESS_TOKEN>
 META_VERIFY_TOKEN=<TOKEN_QUE_TU_DEFINES_EN_META>
 META_APP_SECRET=<APP_SECRET_DE_TU_FACEBOOK_APP>
-META_API_VERSION=v23.0
+META_API_VERSION=v25.0
 META_ACTIVATE=true
 ```
 
@@ -148,7 +148,7 @@ SET
     'accessToken', '<META_ACCESS_TOKEN>',
     'verifyToken', '<META_VERIFY_TOKEN>',
     'appSecret', '<META_APP_SECRET>',
-    'apiVersion', 'v23.0'
+    'apiVersion', 'v25.0'
   ),
   updated_at = NOW()
 WHERE id = 'provider_connection_acme';

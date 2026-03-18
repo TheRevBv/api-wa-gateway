@@ -36,6 +36,27 @@ import type { WebhookSubscription } from "../../src/domain/webhooks/webhook-subs
 
 const now = () => new Date();
 
+const appendProviderStatusEvent = (current: unknown, event: unknown): unknown => {
+  if (event === undefined) {
+    return current;
+  }
+
+  if (typeof current === "object" && current !== null && !Array.isArray(current)) {
+    const record = current as Record<string, unknown>;
+    const existingEvents = Array.isArray(record.providerStatusEvents) ? record.providerStatusEvents : [];
+
+    return {
+      ...record,
+      providerStatusEvents: [...existingEvents, event]
+    };
+  }
+
+  return {
+    initialPayloadRaw: current,
+    providerStatusEvents: [event]
+  };
+};
+
 export class InMemoryTenantRepository implements TenantRepository {
   constructor(private readonly items = new Map<string, Tenant>()) {}
 
@@ -203,6 +224,35 @@ export class InMemoryMessageRepository implements MessageRepository {
     };
     this.items.set(created.id, created);
     return created;
+  }
+
+  async updateStatusByProviderMessageId(input: {
+    tenantId: string;
+    provider: ProviderConnection["provider"];
+    providerMessageId: string;
+    status: Message["status"];
+    sentAt?: Date | null;
+    payloadRaw?: unknown;
+  }) {
+    const existing = await this.findByProviderMessageId(
+      input.tenantId,
+      input.provider,
+      input.providerMessageId
+    );
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated: Message = {
+      ...existing,
+      status: input.status,
+      sentAt: input.sentAt ?? existing.sentAt,
+      payloadRaw: appendProviderStatusEvent(existing.payloadRaw, input.payloadRaw)
+    };
+
+    this.items.set(updated.id, updated);
+    return updated;
   }
 
   async listByConversation(tenantId: string, conversationId: string, query: { limit: number; offset: number }) {
@@ -425,6 +475,7 @@ export class FakeMetaWebhookService implements MetaWebhookService {
   nextChallenge = "challenge-token";
   nextEventResult: MetaWebhookEventResult = {
     processedMessages: 1,
+    processedStatuses: 0,
     ignoredEvents: 0
   };
 

@@ -233,12 +233,19 @@ const toBaileysMessageContent = (content: ProviderSendMessageCommand["content"])
     };
   }
 
-  return {
-    document: { url: content.mediaUrl },
-    caption: content.caption,
-    mimetype: content.mimeType ?? "application/octet-stream",
-    fileName: content.fileName
-  };
+  if (content.type === "document") {
+    return {
+      document: { url: content.mediaUrl },
+      caption: content.caption,
+      mimetype: content.mimeType ?? "application/octet-stream",
+      fileName: content.fileName
+    };
+  }
+
+  throw new ApplicationError("Baileys does not support template messages", {
+    code: "provider_send_failed",
+    statusCode: 400
+  });
 };
 
 export interface BaileysWhatsAppProviderOptions {

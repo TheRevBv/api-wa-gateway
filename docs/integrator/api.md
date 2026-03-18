@@ -48,7 +48,8 @@ Envía un mensaje outbound por la conexión de proveedor activa del tenant.
   "to": "5215512345678",
   "content": {
     "type": "text",
-    "text": "hola desde mi sistema"
+    "text": "hola desde mi sistema",
+    "previewUrl": true
   }
 }
 ```
@@ -79,6 +80,19 @@ Envía un mensaje outbound por la conexión de proveedor activa del tenant.
     "mimeType": "application/pdf",
     "caption": "documento de prueba",
     "fileName": "sample.pdf"
+  }
+}
+```
+
+#### Template de Meta
+
+```json
+{
+  "to": "524792348066",
+  "content": {
+    "type": "template",
+    "name": "hello_world",
+    "languageCode": "en_US"
   }
 }
 ```
@@ -133,6 +147,12 @@ Envía un mensaje outbound por la conexión de proveedor activa del tenant.
 - `409`: no hay conexión de proveedor activa o el proveedor requiere autenticación adicional
 - `502`: el proveedor rechazó el mensaje
 - `503`: el proveedor no está disponible para enviar en ese momento
+
+### Notas de estado para Meta
+
+- `sent` significa que el proveedor aceptó el envío síncrono.
+- `accepted` aparece cuando Meta devuelve `message_status=accepted` en la respuesta inicial.
+- En Meta, el mensaje puede avanzar luego a `delivered`, `read` o `failed` por webhook de estados.
 
 ## Listar conversaciones
 

@@ -10,7 +10,8 @@ const sendMessageBodySchema = z.object({
   content: z.discriminatedUnion("type", [
     z.object({
       type: z.literal("text"),
-      text: z.string().min(1)
+      text: z.string().min(1),
+      previewUrl: z.boolean().optional()
     }),
     z.object({
       type: z.literal("image"),
@@ -25,6 +26,11 @@ const sendMessageBodySchema = z.object({
       mimeType: z.string().optional(),
       caption: z.string().optional(),
       fileName: z.string().min(1)
+    }),
+    z.object({
+      type: z.literal("template"),
+      name: z.string().min(1),
+      languageCode: z.string().min(1).optional()
     })
   ])
 });

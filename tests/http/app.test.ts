@@ -151,6 +151,7 @@ describe("HTTP app", () => {
     expect(webhookResponse.json()).toEqual({
       received: true,
       processedMessages: 1,
+      processedStatuses: 0,
       ignoredEvents: 0
     });
     expect(metaWebhookService.verificationInputs).toHaveLength(1);

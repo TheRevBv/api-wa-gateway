@@ -38,6 +38,41 @@ describe("SendOutboundMessageUseCase", () => {
     expect(repositories.messages.all()).toHaveLength(1);
   });
 
+  it("persists accepted template messages when the provider reports accepted", async () => {
+    const repositories = new InMemoryRepositoryBundle();
+    repositories.tenants.set(createTenant());
+    repositories.providerConnections.set(createProviderConnection({ provider: "meta" }));
+    repositories.conversations.listByTenant = repositories.listConversations.bind(repositories);
+
+    const provider = new FakeWhatsAppProvider();
+    provider.nextResult = {
+      providerMessageId: "wamid.template-1",
+      payloadRaw: { ok: true, message_status: "accepted" },
+      status: "accepted",
+      sentAt: new Date("2026-01-01T00:00:00.000Z")
+    };
+
+    const useCase = new SendOutboundMessageUseCase(
+      repositories,
+      new FakeWhatsAppProviderRegistry(provider)
+    );
+
+    const result = await useCase.execute({
+      tenantId: "tenant-1",
+      to: "524792348066",
+      content: {
+        type: "template",
+        name: "hello_world",
+        languageCode: "en_US"
+      }
+    });
+
+    expect(result.message.status).toBe("accepted");
+    expect(result.message.type).toBe("template");
+    expect(result.message.body).toBe("hello_world");
+    expect(result.message.media).toBeNull();
+  });
+
   it("fails when there is no provider connection", async () => {
     const repositories = new InMemoryRepositoryBundle();
     repositories.tenants.set(createTenant());

@@ -77,7 +77,8 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
   const metaProvider = new MetaWhatsAppProvider();
   const metaWebhookService = new DefaultMetaWebhookService(
     repositories.providerConnections,
-    receiveInboundMessage
+    receiveInboundMessage,
+    repositories.messages
   );
   const providerRegistry = new DefaultWhatsAppProviderRegistry([baileysProvider, metaProvider]);
 

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { ApplicationError } from "../../application/errors/application-error";
 import type { MetaWebhookEventInput, MetaWebhookEventResult, MetaWebhookService, MetaWebhookVerificationInput } from "../../application/ports/meta-webhook-service";
-import type { ProviderConnectionRepository } from "../../application/ports/repositories";
+import type { MessageRepository, ProviderConnectionRepository } from "../../application/ports/repositories";
 import type { InboundMessageContent, InboundProviderMessage } from "../../application/ports/whatsapp-provider";
 import type { ReceiveInboundMessageUseCase } from "../../application/use-cases/receive-inbound-message";
 import { parseMetaProviderConfig } from "./meta-provider-config";
@@ -91,6 +91,31 @@ const documentMessageSchema = z.object({
   })
 });
 
+const statusMessageSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(["accepted", "sent", "delivered", "read", "failed"]),
+    timestamp: z.string().optional(),
+    recipient_id: z.string().optional(),
+    errors: z
+      .array(
+        z
+          .object({
+            code: z.number().optional(),
+            title: z.string().optional(),
+            message: z.string().optional(),
+            error_data: z
+              .object({
+                details: z.string().optional()
+              })
+              .optional()
+          })
+          .passthrough()
+      )
+      .optional()
+  })
+  .passthrough();
+
 const unixTimestampToDate = (value: string): Date => {
   const parsed = Number(value);
 
@@ -140,7 +165,8 @@ const toInboundContent = (message: z.infer<typeof textMessageSchema> | z.infer<t
 export class DefaultMetaWebhookService implements MetaWebhookService {
   constructor(
     private readonly providerConnections: ProviderConnectionRepository,
-    private readonly receiveInboundMessage: ReceiveInboundMessageUseCase
+    private readonly receiveInboundMessage: ReceiveInboundMessageUseCase,
+    private readonly messages: MessageRepository
   ) {}
 
   async verifyWebhook(input: MetaWebhookVerificationInput): Promise<string> {
@@ -194,6 +220,7 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
     }
 
     let processedMessages = 0;
+    let processedStatuses = 0;
     let ignoredEvents = 0;
 
     for (const entry of parsed.data.entry) {
@@ -217,8 +244,24 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
           });
         }
 
+        if (change.value.statuses && change.value.statuses.length > 0) {
+          for (const rawStatus of change.value.statuses) {
+            const processedStatus = await this.applyStatusUpdate(connection.tenantId, rawStatus);
+
+            if (processedStatus) {
+              processedStatuses += 1;
+              continue;
+            }
+
+            ignoredEvents += 1;
+          }
+        }
+
         if (!change.value.messages || change.value.messages.length === 0) {
-          ignoredEvents += 1;
+          if (!change.value.statuses || change.value.statuses.length === 0) {
+            ignoredEvents += 1;
+          }
+
           continue;
         }
 
@@ -238,6 +281,7 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
 
     return {
       processedMessages,
+      processedStatuses,
       ignoredEvents
     };
   }
@@ -340,5 +384,27 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
     }
 
     return null;
+  }
+
+  private async applyStatusUpdate(tenantId: string, rawStatus: unknown): Promise<boolean> {
+    const parsed = statusMessageSchema.safeParse(rawStatus);
+
+    if (!parsed.success) {
+      throw new ApplicationError("Meta status payload is invalid", {
+        code: "meta_webhook_payload_invalid",
+        statusCode: 400
+      });
+    }
+
+    const updated = await this.messages.updateStatusByProviderMessageId({
+      tenantId,
+      provider: "meta",
+      providerMessageId: parsed.data.id,
+      status: parsed.data.status,
+      sentAt: parsed.data.timestamp ? unixTimestampToDate(parsed.data.timestamp) : undefined,
+      payloadRaw: parsed.data
+    });
+
+    return updated !== null;
   }
 }

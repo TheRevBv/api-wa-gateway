@@ -38,5 +38,5 @@
 - Una conexión de proveedor activa por tenant en el MVP.
 - Una suscripción de webhook activa por tenant en el MVP.
 - Una conversación por `(tenantId, contactId, channel)` en el MVP.
-- Tipos de mensaje soportados: `text`, `image`, `document`.
+- Tipos de mensaje soportados: `text`, `image`, `document`, `template`.
 - El envío outbound de media es solo basado en URL.

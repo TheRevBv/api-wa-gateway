@@ -30,7 +30,8 @@ describe("DefaultMetaWebhookService", () => {
     );
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
-      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService())
+      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
+      repositories.messages
     );
 
     const challenge = await service.verifyWebhook({
@@ -60,7 +61,11 @@ describe("DefaultMetaWebhookService", () => {
     );
     const webhookDispatchService = new RecordingWebhookDispatchService();
     const receiveInboundMessage = new ReceiveInboundMessageUseCase(repositories, webhookDispatchService);
-    const service = new DefaultMetaWebhookService(repositories.providerConnections, receiveInboundMessage);
+    const service = new DefaultMetaWebhookService(
+      repositories.providerConnections,
+      receiveInboundMessage,
+      repositories.messages
+    );
     const body = JSON.stringify({
       object: "whatsapp_business_account",
       entry: [
@@ -107,6 +112,7 @@ describe("DefaultMetaWebhookService", () => {
 
     expect(result).toEqual({
       processedMessages: 1,
+      processedStatuses: 0,
       ignoredEvents: 0
     });
     expect(repositories.contacts.all()).toHaveLength(1);
@@ -115,9 +121,41 @@ describe("DefaultMetaWebhookService", () => {
     expect(repositories.messages.all()[0]?.body).toBe("hola desde meta");
   });
 
-  it("ignores status updates and unsupported webhook entries", async () => {
+  it("updates outbound message statuses from Meta webhook events", async () => {
     const repositories = new InMemoryRepositoryBundle();
     repositories.tenants.set(createTenant());
+    const contact = await repositories.contacts.create({
+      id: "contact-1",
+      tenantId: "tenant-1",
+      phone: "5215512345678",
+      displayName: "Ada",
+      providerContactId: "5215512345678"
+    });
+    const conversation = await repositories.conversations.create({
+      id: "conversation-1",
+      tenantId: "tenant-1",
+      contactId: contact.id,
+      channel: "whatsapp",
+      status: "active",
+      startedAt: new Date("2026-01-01T00:00:00.000Z"),
+      lastMessageAt: new Date("2026-01-01T00:00:00.000Z")
+    });
+    await repositories.messages.create({
+      id: "message-1",
+      tenantId: "tenant-1",
+      conversationId: conversation.id,
+      contactId: contact.id,
+      provider: "meta",
+      providerMessageId: "wamid.abc",
+      direction: "outbound",
+      type: "text",
+      body: "hola",
+      media: null,
+      payloadRaw: { initial: true },
+      status: "accepted",
+      sentAt: null,
+      receivedAt: null
+    });
     repositories.providerConnections.set(
       createProviderConnection({
         provider: "meta",
@@ -132,7 +170,8 @@ describe("DefaultMetaWebhookService", () => {
     );
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
-      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService())
+      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
+      repositories.messages
     );
     const body = JSON.stringify({
       object: "whatsapp_business_account",
@@ -148,7 +187,9 @@ describe("DefaultMetaWebhookService", () => {
                 statuses: [
                   {
                     id: "wamid.abc",
-                    status: "delivered"
+                    status: "delivered",
+                    timestamp: "1773331200",
+                    recipient_id: "5215512345678"
                   }
                 ]
               }
@@ -167,7 +208,18 @@ describe("DefaultMetaWebhookService", () => {
 
     expect(result).toEqual({
       processedMessages: 0,
-      ignoredEvents: 1
+      processedStatuses: 1,
+      ignoredEvents: 0
+    });
+    expect(repositories.messages.all()[0]?.status).toBe("delivered");
+    expect(repositories.messages.all()[0]?.payloadRaw).toMatchObject({
+      initial: true,
+      providerStatusEvents: [
+        expect.objectContaining({
+          id: "wamid.abc",
+          status: "delivered"
+        })
+      ]
     });
   });
 
@@ -187,7 +239,8 @@ describe("DefaultMetaWebhookService", () => {
     );
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
-      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService())
+      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
+      repositories.messages
     );
 
     await expect(
@@ -200,6 +253,64 @@ describe("DefaultMetaWebhookService", () => {
     ).rejects.toMatchObject({
       code: "meta_webhook_signature_invalid",
       statusCode: 401
+    });
+  });
+
+  it("ignores status events that do not match a persisted outbound message", async () => {
+    const repositories = new InMemoryRepositoryBundle();
+    repositories.tenants.set(createTenant());
+    repositories.providerConnections.set(
+      createProviderConnection({
+        provider: "meta",
+        connectionKey: "1234567890",
+        config: {
+          accessToken: "meta-token",
+          verifyToken: "verify-token",
+          appSecret: "app-secret",
+          apiVersion: "v23.0"
+        }
+      })
+    );
+    const service = new DefaultMetaWebhookService(
+      repositories.providerConnections,
+      new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
+      repositories.messages
+    );
+    const body = JSON.stringify({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          changes: [
+            {
+              field: "messages",
+              value: {
+                metadata: {
+                  phone_number_id: "1234567890"
+                },
+                statuses: [
+                  {
+                    id: "wamid.unknown",
+                    status: "delivered"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    });
+
+    const result = await service.handleWebhookEvent({
+      connectionKey: "1234567890",
+      rawBody: body,
+      signatureHeader: signPayload(body, "app-secret"),
+      payload: JSON.parse(body)
+    });
+
+    expect(result).toEqual({
+      processedMessages: 0,
+      processedStatuses: 0,
+      ignoredEvents: 1
     });
   });
 });

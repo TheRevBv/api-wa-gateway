@@ -11,6 +11,7 @@ export interface MetaSendMessageRequest {
 
 export interface MetaSendMessageResponse {
   messageId: string;
+  messageStatus: "accepted" | "sent" | null;
   payloadRaw: unknown;
 }
 
@@ -95,6 +96,12 @@ export class MetaCloudApiClient {
 
     return {
       messageId,
+      messageStatus:
+        (Array.isArray((body as { messages?: unknown[] } | null)?.messages)
+          ? ((body as { messages?: Array<{ message_status?: unknown }> }).messages?.[0]?.message_status ?? null)
+          : null) === "accepted"
+          ? "accepted"
+          : null,
       payloadRaw: body
     };
   }

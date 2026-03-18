@@ -1,8 +1,8 @@
 import type { ProviderName } from "../providers/provider-connection";
 
 export type MessageDirection = "inbound" | "outbound";
-export type MessageType = "text" | "image" | "document";
-export type MessageStatus = "received" | "sent" | "failed";
+export type MessageType = "text" | "image" | "document" | "template";
+export type MessageStatus = "received" | "accepted" | "sent" | "delivered" | "read" | "failed";
 
 export interface MessageMedia {
   url?: string;
@@ -15,6 +15,7 @@ export interface MessageMedia {
 export interface TextMessageContent {
   type: "text";
   text: string;
+  previewUrl?: boolean;
 }
 
 export interface ImageMessageContent {
@@ -33,10 +34,17 @@ export interface DocumentMessageContent {
   fileName: string;
 }
 
+export interface TemplateMessageContent {
+  type: "template";
+  name: string;
+  languageCode?: string;
+}
+
 export type MessageContent =
   | TextMessageContent
   | ImageMessageContent
-  | DocumentMessageContent;
+  | DocumentMessageContent
+  | TemplateMessageContent;
 
 export interface Message {
   id: string;
