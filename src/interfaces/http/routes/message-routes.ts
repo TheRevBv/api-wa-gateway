@@ -30,7 +30,11 @@ const sendMessageBodySchema = z.object({
     z.object({
       type: z.literal("template"),
       name: z.string().min(1),
-      languageCode: z.string().min(1).optional()
+      languageCode: z.string().min(1).optional(),
+      bodyParameters: z
+        .array(z.union([z.string().min(1), z.number().finite()]))
+        .min(1)
+        .optional()
     })
   ])
 });

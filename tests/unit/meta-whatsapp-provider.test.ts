@@ -180,7 +180,8 @@ describe("MetaWhatsAppProvider", () => {
       content: {
         type: "template",
         name: "hello_world",
-        languageCode: "en_US"
+        languageCode: "en_US",
+        bodyParameters: ["TI-12345", 48]
       }
     });
 
@@ -194,7 +195,22 @@ describe("MetaWhatsAppProvider", () => {
         name: "hello_world",
         language: {
           code: "en_US"
-        }
+        },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              {
+                type: "text",
+                text: "TI-12345"
+              },
+              {
+                type: "text",
+                text: "48"
+              }
+            ]
+          }
+        ]
       }
     });
     expect(result.providerMessageId).toBe("wamid.template-1");

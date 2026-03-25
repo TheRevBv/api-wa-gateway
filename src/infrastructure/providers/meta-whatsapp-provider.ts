@@ -55,7 +55,20 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
           name: command.content.name,
           language: {
             code: command.content.languageCode ?? "en_US"
-          }
+          },
+          ...(command.content.bodyParameters && command.content.bodyParameters.length > 0
+            ? {
+                components: [
+                  {
+                    type: "body",
+                    parameters: command.content.bodyParameters.map((parameter) => ({
+                      type: "text",
+                      text: String(parameter)
+                    }))
+                  }
+                ]
+              }
+            : {})
         }
       };
   }
