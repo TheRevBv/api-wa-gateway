@@ -57,19 +57,42 @@ describe("MetaWhatsAppProvider", () => {
   });
 
   it("maps document messages with filename", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          messages: [{ id: "wamid.456" }]
-        }),
-        {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("pdf-content", {
           status: 200,
           headers: {
-            "content-type": "application/json"
+            "content-type": "application/pdf"
           }
-        }
+        })
       )
-    );
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "meta-media-1"
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            messages: [{ id: "wamid.456" }]
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+      );
     const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
 
     await provider.sendMessage({
@@ -92,14 +115,17 @@ describe("MetaWhatsAppProvider", () => {
       }
     });
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://example.com/test.pdf");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://graph.facebook.com/v23.0/1234567890/media");
+    const [, init] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: "5215512345678",
       type: "document",
       document: {
-        link: "https://example.com/test.pdf",
+        id: "meta-media-1",
         caption: "demo document",
         filename: "test.pdf"
       }
@@ -181,7 +207,7 @@ describe("MetaWhatsAppProvider", () => {
         type: "template",
         name: "hello_world",
         languageCode: "en_US",
-        bodyParameters: ["TI-12345", 48]
+        bodyParameters: ["Citizen", 3]
       }
     });
 
@@ -202,11 +228,11 @@ describe("MetaWhatsAppProvider", () => {
             parameters: [
               {
                 type: "text",
-                text: "TI-12345"
+                text: "Citizen"
               },
               {
                 type: "text",
-                text: "48"
+                text: "3"
               }
             ]
           }
