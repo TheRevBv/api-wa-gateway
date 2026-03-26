@@ -12,6 +12,8 @@ import type {
 } from "../../application/ports/baileys-session-view";
 import type { ProviderConnectionRepository } from "../../application/ports/repositories";
 import type {
+  ProviderDownloadMediaCommand,
+  ProviderDownloadMediaResult,
   ProviderRuntime,
   ProviderSendMessageCommand,
   ProviderSendMessageResult,
@@ -374,6 +376,15 @@ export class BaileysWhatsAppProvider
         sentAt: null
       };
     }
+  }
+
+  async downloadMedia(
+    _command: ProviderDownloadMediaCommand
+  ): Promise<ProviderDownloadMediaResult> {
+    throw new ApplicationError("Baileys media download is not implemented", {
+      code: "provider_media_download_not_supported",
+      statusCode: 501
+    });
   }
 
   private async attemptSendMessage(

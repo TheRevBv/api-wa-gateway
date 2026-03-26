@@ -29,6 +29,22 @@ export class PostgresProviderConnectionRepository implements ProviderConnectionR
     return connection ?? null;
   }
 
+  async findActiveByTenantIdAndProvider(tenantId: string, provider: "baileys" | "meta") {
+    const [connection] = await this.db
+      .select()
+      .from(providerConnectionsTable)
+      .where(
+        and(
+          eq(providerConnectionsTable.tenantId, tenantId),
+          eq(providerConnectionsTable.provider, provider),
+          eq(providerConnectionsTable.status, "active")
+        )
+      )
+      .limit(1);
+
+    return connection ?? null;
+  }
+
   async findActiveByProviderAndConnectionKey(provider: "baileys" | "meta", connectionKey: string) {
     const [connection] = await this.db
       .select()

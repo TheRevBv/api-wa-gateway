@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 
 import { DefaultWebhookDispatchService } from "../application/services/webhook-delivery-service";
 import type { MetaWebhookService } from "../application/ports/meta-webhook-service";
+import { DownloadMessageMediaUseCase } from "../application/use-cases/download-message-media";
 import { GetConversationUseCase } from "../application/use-cases/get-conversation";
 import { ListConversationMessagesUseCase } from "../application/use-cases/list-conversation-messages";
 import { ListConversationsUseCase } from "../application/use-cases/list-conversations";
@@ -32,9 +33,11 @@ export interface RuntimeServices {
   listConversations: ListConversationsUseCase;
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
+  downloadMessageMedia: DownloadMessageMediaUseCase;
   metaWebhookService: MetaWebhookService;
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
+  gatewaySharedSecret: string;
 }
 
 export interface RuntimeContext {
@@ -89,9 +92,11 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
       listConversations: new ListConversationsUseCase(repositories),
       getConversation: new GetConversationUseCase(repositories),
       listConversationMessages: new ListConversationMessagesUseCase(repositories),
+      downloadMessageMedia: new DownloadMessageMediaUseCase(repositories, providerRegistry),
       metaWebhookService,
       baileysSessionView: baileysProvider,
-      baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN
+      baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN,
+      gatewaySharedSecret: env.GATEWAY_SHARED_SECRET
     },
     providerRuntimes: [baileysProvider],
     close: async () => {

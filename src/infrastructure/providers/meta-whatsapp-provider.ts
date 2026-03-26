@@ -1,5 +1,7 @@
 import { ApplicationError } from "../../application/errors/application-error";
 import type {
+  ProviderDownloadMediaCommand,
+  ProviderDownloadMediaResult,
   ProviderSendMessageCommand,
   ProviderSendMessageResult,
   WhatsAppProvider
@@ -130,5 +132,20 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       status: response.messageStatus ?? "sent",
       sentAt: new Date()
     };
+  }
+
+  async downloadMedia(
+    command: ProviderDownloadMediaCommand
+  ): Promise<ProviderDownloadMediaResult> {
+    const config = parseMetaProviderConfig(command.connection.config);
+
+    return this.client.downloadMedia({
+      accessToken: config.accessToken,
+      apiVersion: config.apiVersion,
+      baseUrl: config.baseUrl,
+      providerMediaId: command.providerMediaId,
+      fallbackMimeType: command.fallbackMimeType,
+      fallbackFileName: command.fallbackFileName
+    });
   }
 }

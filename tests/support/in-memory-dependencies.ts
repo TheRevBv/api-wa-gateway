@@ -22,6 +22,8 @@ import type {
 } from "../../src/application/ports/repositories";
 import type { WebhookDispatchService } from "../../src/application/ports/webhook-dispatcher";
 import type {
+  ProviderDownloadMediaCommand,
+  ProviderDownloadMediaResult,
   ProviderSendMessageCommand,
   ProviderSendMessageResult,
   WhatsAppProvider,
@@ -317,6 +319,20 @@ export class InMemoryProviderConnectionRepository implements ProviderConnectionR
     );
   }
 
+  async findActiveByTenantIdAndProvider(
+    tenantId: string,
+    provider: ProviderConnection["provider"]
+  ) {
+    return (
+      [...this.items.values()].find(
+        (connection) =>
+          connection.tenantId === tenantId &&
+          connection.provider === provider &&
+          connection.status === "active"
+      ) ?? null
+    );
+  }
+
   async findActiveByProviderAndConnectionKey(
     provider: ProviderConnection["provider"],
     connectionKey: string
@@ -455,12 +471,19 @@ export class RecordingWebhookDispatchService implements WebhookDispatchService {
 export class FakeWhatsAppProvider implements WhatsAppProvider {
   readonly providerName = "baileys" as const;
   readonly sentCommands: ProviderSendMessageCommand[] = [];
+  readonly downloadedMediaCommands: ProviderDownloadMediaCommand[] = [];
   nextError: Error | null = null;
   nextResult: ProviderSendMessageResult = {
     providerMessageId: "provider-message-1",
     payloadRaw: { ok: true },
     status: "sent",
     sentAt: new Date("2026-01-01T00:00:00.000Z")
+  };
+  nextDownloadResult: ProviderDownloadMediaResult = {
+    contentType: "application/octet-stream",
+    fileName: "media.bin",
+    contentLength: 4,
+    content: new Uint8Array([1, 2, 3, 4]).buffer
   };
 
   async sendMessage(command: ProviderSendMessageCommand) {
@@ -473,6 +496,11 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
     }
 
     return this.nextResult;
+  }
+
+  async downloadMedia(command: ProviderDownloadMediaCommand) {
+    this.downloadedMediaCommands.push(command);
+    return this.nextDownloadResult;
   }
 }
 

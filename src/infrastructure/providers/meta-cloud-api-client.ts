@@ -25,6 +25,22 @@ export interface MetaUploadMediaRequest {
   fileName?: string;
 }
 
+export interface MetaDownloadMediaRequest {
+  accessToken: string;
+  apiVersion: string;
+  baseUrl: string;
+  providerMediaId: string;
+  fallbackMimeType?: string;
+  fallbackFileName?: string;
+}
+
+export interface MetaDownloadMediaResponse {
+  contentType: string;
+  fileName: string | null;
+  contentLength: number | null;
+  content: ArrayBuffer;
+}
+
 const parseResponseBody = async (response: Response): Promise<unknown> => {
   const text = await response.text();
 
@@ -58,6 +74,22 @@ const extractMetaErrorMessage = (body: unknown): string | null => {
   }
 
   return typeof message === "string" && message.length > 0 ? message : null;
+};
+
+const parseFileNameFromDisposition = (disposition: string | null): string | null => {
+  if (!disposition) {
+    return null;
+  }
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const basicMatch = disposition.match(/filename="([^"]+)"/i);
+
+  return basicMatch?.[1] ?? null;
 };
 
 export class MetaCloudApiClient {
@@ -125,6 +157,82 @@ export class MetaCloudApiClient {
     }
 
     return mediaId;
+  }
+
+  async downloadMedia(request: MetaDownloadMediaRequest): Promise<MetaDownloadMediaResponse> {
+    const metadataResponse = await this.fetchImpl(
+      `${request.baseUrl.replace(/\/$/, "")}/${request.apiVersion}/${request.providerMediaId}`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${request.accessToken}`
+        }
+      }
+    );
+    const metadataBody = await parseResponseBody(metadataResponse);
+
+    if (!metadataResponse.ok) {
+      const detail = extractMetaErrorMessage(metadataBody);
+      throw new ApplicationError(
+        detail
+          ? `Meta rejected the media lookup: ${detail}`
+          : "Meta rejected the media lookup",
+        {
+          code: "provider_media_download_failed",
+          statusCode: 502
+        }
+      );
+    }
+
+    const metadata =
+      typeof metadataBody === "object" && metadataBody !== null
+        ? (metadataBody as { url?: unknown; mime_type?: unknown })
+        : null;
+    const downloadUrl = typeof metadata?.url === "string" ? metadata.url : null;
+    const metadataMimeType =
+      typeof metadata?.mime_type === "string" ? metadata.mime_type : null;
+
+    if (!downloadUrl) {
+      throw new ApplicationError("Meta returned an invalid media lookup response", {
+        code: "provider_media_download_failed",
+        statusCode: 502
+      });
+    }
+
+    const mediaResponse = await this.fetchImpl(downloadUrl, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${request.accessToken}`
+      }
+    });
+
+    if (!mediaResponse.ok) {
+      throw new ApplicationError("Meta media download failed", {
+        code: "provider_media_download_failed",
+        statusCode: 502
+      });
+    }
+
+    const contentTypeHeader = mediaResponse.headers.get("content-type");
+    const contentLengthHeader = mediaResponse.headers.get("content-length");
+    const content = await mediaResponse.arrayBuffer();
+
+    return {
+      contentType:
+        request.fallbackMimeType ||
+        metadataMimeType ||
+        (contentTypeHeader ? contentTypeHeader.split(";")[0] : null) ||
+        "application/octet-stream",
+      fileName:
+        parseFileNameFromDisposition(mediaResponse.headers.get("content-disposition")) ??
+        request.fallbackFileName ??
+        null,
+      contentLength:
+        contentLengthHeader && Number.isFinite(Number(contentLengthHeader))
+          ? Number(contentLengthHeader)
+          : content.byteLength,
+      content
+    };
   }
 
   async sendMessage(request: MetaSendMessageRequest): Promise<MetaSendMessageResponse> {

@@ -1,6 +1,7 @@
 import pino from "pino";
 
 import { buildApp } from "../../src/app";
+import { DownloadMessageMediaUseCase } from "../../src/application/use-cases/download-message-media";
 import { GetConversationUseCase } from "../../src/application/use-cases/get-conversation";
 import { ListConversationMessagesUseCase } from "../../src/application/use-cases/list-conversation-messages";
 import { ListConversationsUseCase } from "../../src/application/use-cases/list-conversations";
@@ -47,9 +48,14 @@ describe("HTTP app", () => {
         listConversations: new ListConversationsUseCase(repositories),
         getConversation: new GetConversationUseCase(repositories),
         listConversationMessages: new ListConversationMessagesUseCase(repositories),
+        downloadMessageMedia: new DownloadMessageMediaUseCase(
+          repositories,
+          new FakeWhatsAppProviderRegistry(provider)
+        ),
         metaWebhookService,
         baileysSessionView,
-        baileysDashboardAuthToken: "secret-token"
+        baileysDashboardAuthToken: "secret-token",
+        gatewaySharedSecret: "test-shared-secret"
       }
     });
 

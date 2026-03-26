@@ -21,6 +21,7 @@ const environmentSchema = z.object({
   META_ACCESS_TOKEN: z.string().default(""),
   META_VERIFY_TOKEN: z.string().default(""),
   META_APP_SECRET: z.string().default(""),
+  GATEWAY_SHARED_SECRET: z.string().default("test-shared-secret"),
   META_API_VERSION: z.string().default("v25.0"),
   META_BASE_URL: z.url().default("https://graph.facebook.com"),
   DEMO_WEBHOOK_CALLBACK_URL: z.string().default("http://localhost:9999/webhook"),

@@ -112,6 +112,10 @@ export interface MessageRepository {
 
 export interface ProviderConnectionRepository {
   findActiveByTenantId(tenantId: string): Promise<ProviderConnection | null>;
+  findActiveByTenantIdAndProvider(
+    tenantId: string,
+    provider: ProviderName
+  ): Promise<ProviderConnection | null>;
   findActiveByProviderAndConnectionKey(
     provider: ProviderName,
     connectionKey: string
