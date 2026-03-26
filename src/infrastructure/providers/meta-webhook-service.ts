@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ApplicationError } from "../../application/errors/application-error";
 import type { MetaWebhookEventInput, MetaWebhookEventResult, MetaWebhookService, MetaWebhookVerificationInput } from "../../application/ports/meta-webhook-service";
 import type { MessageRepository, ProviderConnectionRepository } from "../../application/ports/repositories";
+import type { WebhookDispatchService } from "../../application/ports/webhook-dispatcher";
 import type { InboundMessageContent, InboundProviderMessage } from "../../application/ports/whatsapp-provider";
 import type { ReceiveInboundMessageUseCase } from "../../application/use-cases/receive-inbound-message";
 import { parseMetaProviderConfig } from "./meta-provider-config";
@@ -166,7 +167,8 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
   constructor(
     private readonly providerConnections: ProviderConnectionRepository,
     private readonly receiveInboundMessage: ReceiveInboundMessageUseCase,
-    private readonly messages: MessageRepository
+    private readonly messages: MessageRepository,
+    private readonly webhookDispatchService: WebhookDispatchService
   ) {}
 
   async verifyWebhook(input: MetaWebhookVerificationInput): Promise<string> {
@@ -405,6 +407,19 @@ export class DefaultMetaWebhookService implements MetaWebhookService {
       payloadRaw: parsed.data
     });
 
-    return updated !== null;
+    if (!updated) {
+      return false;
+    }
+
+    const context = await this.messages.findContextByMessageId(updated.message.id);
+
+    if (context) {
+      await this.webhookDispatchService.dispatchMessageStatusUpdated({
+        context,
+        previousStatus: updated.previousStatus,
+      });
+    }
+
+    return true;
   }
 }

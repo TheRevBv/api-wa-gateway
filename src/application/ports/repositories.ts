@@ -73,6 +73,7 @@ export interface ConversationRepository {
 
 export interface MessageRepository {
   findById(id: string): Promise<Message | null>;
+  findContextByMessageId(id: string): Promise<MessageWithConversationContext | null>;
   findByProviderMessageId(
     tenantId: string,
     provider: ProviderName,
@@ -101,7 +102,7 @@ export interface MessageRepository {
     status: MessageStatus;
     sentAt?: Date | null;
     payloadRaw?: unknown;
-  }): Promise<Message | null>;
+  }): Promise<{ message: Message; previousStatus: MessageStatus } | null>;
   listByConversation(
     tenantId: string,
     conversationId: string,

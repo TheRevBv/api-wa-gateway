@@ -11,6 +11,7 @@ import type {
 import type {
   ContactRepository,
   ConversationRepository,
+  MessageWithConversationContext,
   MessageRepository,
   PaginatedResult,
   ProviderConnectionRepository,
@@ -28,7 +29,7 @@ import type {
 } from "../../src/application/ports/whatsapp-provider";
 import type { Contact } from "../../src/domain/messaging/contact";
 import type { Conversation } from "../../src/domain/messaging/conversation";
-import type { Message } from "../../src/domain/messaging/message";
+import type { Message, MessageStatus } from "../../src/domain/messaging/message";
 import type { ProviderConnection } from "../../src/domain/providers/provider-connection";
 import type { Tenant } from "../../src/domain/tenants/tenant";
 import type { WebhookDispatch } from "../../src/domain/webhooks/webhook-dispatch";
@@ -181,10 +182,38 @@ export class InMemoryConversationRepository implements ConversationRepository {
 }
 
 export class InMemoryMessageRepository implements MessageRepository {
-  constructor(private readonly items = new Map<string, Message>()) {}
+  constructor(
+    private readonly contacts: InMemoryContactRepository,
+    private readonly conversations: InMemoryConversationRepository,
+    private readonly tenants: InMemoryTenantRepository,
+    private readonly items = new Map<string, Message>(),
+  ) {}
 
   async findById(id: string) {
     return this.items.get(id) ?? null;
+  }
+
+  async findContextByMessageId(id: string): Promise<MessageWithConversationContext | null> {
+    const message = this.items.get(id);
+
+    if (!message) {
+      return null;
+    }
+
+    const tenant = await this.tenants.findById(message.tenantId);
+    const contact = await this.contacts.findById(message.contactId);
+    const conversation = await this.conversations.findById(message.conversationId);
+
+    if (!tenant || !contact || !conversation) {
+      return null;
+    }
+
+    return {
+      tenant,
+      contact,
+      conversation,
+      message,
+    };
   }
 
   async findByProviderMessageId(
@@ -244,6 +273,7 @@ export class InMemoryMessageRepository implements MessageRepository {
       return null;
     }
 
+    const previousStatus: MessageStatus = existing.status;
     const updated: Message = {
       ...existing,
       status: input.status,
@@ -252,7 +282,10 @@ export class InMemoryMessageRepository implements MessageRepository {
     };
 
     this.items.set(updated.id, updated);
-    return updated;
+    return {
+      message: updated,
+      previousStatus,
+    };
   }
 
   async listByConversation(tenantId: string, conversationId: string, query: { limit: number; offset: number }) {
@@ -408,9 +441,14 @@ export class InMemoryWebhookDispatchRepository implements WebhookDispatchReposit
 
 export class RecordingWebhookDispatchService implements WebhookDispatchService {
   readonly dispatchedContexts = new Array<unknown>();
+  readonly dispatchedStatusUpdates = new Array<unknown>();
 
   async dispatchInboundMessage(context: unknown) {
     this.dispatchedContexts.push(context);
+  }
+
+  async dispatchMessageStatusUpdated(input: unknown) {
+    this.dispatchedStatusUpdates.push(input);
   }
 }
 
@@ -494,7 +532,11 @@ export class InMemoryRepositoryBundle implements RepositoryBundle {
   readonly tenants = new InMemoryTenantRepository();
   readonly contacts = new InMemoryContactRepository();
   readonly conversations = new InMemoryConversationRepository();
-  readonly messages = new InMemoryMessageRepository();
+  readonly messages = new InMemoryMessageRepository(
+    this.contacts,
+    this.conversations,
+    this.tenants,
+  );
   readonly providerConnections = new InMemoryProviderConnectionRepository();
   readonly webhookSubscriptions = new InMemoryWebhookSubscriptionRepository();
   readonly webhookDispatches = new InMemoryWebhookDispatchRepository();

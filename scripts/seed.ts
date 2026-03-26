@@ -9,7 +9,7 @@ import {
   webhookSubscriptionsTable,
 } from "../src/infrastructure/database/schema";
 
-const DEMO_TENANT_ID = "tenant_demo";
+const DEMO_TENANT_ID = "tenant-demo";
 const DEMO_WEBHOOK_ID = "webhook_demo";
 const DEMO_BAILEYS_PROVIDER_CONNECTION_ID = "baileys_demo_connection";
 const DEMO_META_PROVIDER_CONNECTION_ID = "meta_demo_connection";
@@ -36,8 +36,8 @@ const run = async (): Promise<void> => {
       .values({
         id: DEMO_WEBHOOK_ID,
         tenantId: DEMO_TENANT_ID,
-        callbackUrl: "http://localhost:9999/webhook",
-        secret: "demo-secret",
+        callbackUrl: env.DEMO_WEBHOOK_CALLBACK_URL,
+        secret: env.DEMO_WEBHOOK_SECRET,
         isActive: true,
         createdAt: now,
         updatedAt: now,

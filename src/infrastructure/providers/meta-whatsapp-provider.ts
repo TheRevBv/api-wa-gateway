@@ -7,7 +7,28 @@ import type {
 import { MetaCloudApiClient } from "./meta-cloud-api-client";
 import { parseMetaProviderConfig } from "./meta-provider-config";
 
-const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unknown> => {
+const toTemplateComponents = (bodyParameters?: Array<string | number>) => {
+  if (!bodyParameters || bodyParameters.length === 0) {
+    return undefined;
+  }
+
+  return [
+    {
+      type: "body",
+      parameters: bodyParameters.map((parameter) => ({
+        type: "text",
+        text: String(parameter)
+      }))
+    }
+  ];
+};
+
+const toMetaPayload = async (
+  client: MetaCloudApiClient,
+  command: ProviderSendMessageCommand,
+): Promise<Record<string, unknown>> => {
+  const config = parseMetaProviderConfig(command.connection.config);
+
   switch (command.content.type) {
     case "text":
       return {
@@ -25,10 +46,20 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
         });
       }
 
+      const uploadedImageId = await client.uploadMedia({
+        accessToken: config.accessToken,
+        apiVersion: config.apiVersion,
+        baseUrl: config.baseUrl,
+        phoneNumberId: command.connection.connectionKey,
+        mediaUrl: command.content.mediaUrl,
+        mimeType: command.content.mimeType,
+        fileName: command.content.fileName
+      });
+
       return {
         type: "image",
         image: {
-          link: command.content.mediaUrl,
+          id: uploadedImageId,
           ...(command.content.caption ? { caption: command.content.caption } : {})
         }
       };
@@ -40,10 +71,20 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
         });
       }
 
+      const uploadedDocumentId = await client.uploadMedia({
+        accessToken: config.accessToken,
+        apiVersion: config.apiVersion,
+        baseUrl: config.baseUrl,
+        phoneNumberId: command.connection.connectionKey,
+        mediaUrl: command.content.mediaUrl,
+        mimeType: command.content.mimeType,
+        fileName: command.content.fileName
+      });
+
       return {
         type: "document",
         document: {
-          link: command.content.mediaUrl,
+          id: uploadedDocumentId,
           ...(command.content.caption ? { caption: command.content.caption } : {}),
           ...(command.content.fileName ? { filename: command.content.fileName } : {})
         }
@@ -55,7 +96,12 @@ const toMetaPayload = (command: ProviderSendMessageCommand): Record<string, unkn
           name: command.content.name,
           language: {
             code: command.content.languageCode ?? "en_US"
-          }
+          },
+          ...(toTemplateComponents(command.content.bodyParameters)
+            ? {
+                components: toTemplateComponents(command.content.bodyParameters)
+              }
+            : {})
         }
       };
   }
@@ -68,13 +114,14 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
   async sendMessage(command: ProviderSendMessageCommand): Promise<ProviderSendMessageResult> {
     const config = parseMetaProviderConfig(command.connection.config);
+    const payload = await toMetaPayload(this.client, command);
     const response = await this.client.sendMessage({
       accessToken: config.accessToken,
       apiVersion: config.apiVersion,
       baseUrl: config.baseUrl,
       phoneNumberId: command.connection.connectionKey,
       to: command.to,
-      payload: toMetaPayload(command)
+      payload
     });
 
     return {
