@@ -4,7 +4,7 @@ import { MetaWhatsAppProvider } from "../../src/infrastructure/providers/meta-wh
 import { createProviderConnection } from "../support/in-memory-dependencies";
 
 describe("MetaWhatsAppProvider", () => {
-  it("maps text messages to the Cloud API payload", async () => {
+  it("maps text messages to the Cloud API payload and defaults the initial status to accepted", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -53,7 +53,7 @@ describe("MetaWhatsAppProvider", () => {
       }
     });
     expect(result.providerMessageId).toBe("wamid.123");
-    expect(result.status).toBe("sent");
+    expect(result.status).toBe("accepted");
   });
 
   it("maps document messages with filename", async () => {
@@ -294,5 +294,43 @@ describe("MetaWhatsAppProvider", () => {
     });
     expect(result.providerMessageId).toBe("wamid.template-1");
     expect(result.status).toBe("accepted");
+  });
+
+  it("preserves an explicit sent provider status when Meta returns it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          messages: [{ id: "wamid.text-1", message_status: "sent" }]
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      )
+    );
+    const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
+
+    const result = await provider.sendMessage({
+      connection: createProviderConnection({
+        provider: "meta",
+        connectionKey: "1234567890",
+        config: {
+          accessToken: "meta-token",
+          verifyToken: "verify-token",
+          appSecret: "app-secret",
+          apiVersion: "v25.0"
+        }
+      }),
+      to: "5215512345678",
+      content: {
+        type: "text",
+        text: "hola meta"
+      }
+    });
+
+    expect(result.providerMessageId).toBe("wamid.text-1");
+    expect(result.status).toBe("sent");
   });
 });

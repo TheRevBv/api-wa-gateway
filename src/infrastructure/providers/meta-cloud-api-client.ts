@@ -92,6 +92,16 @@ const parseFileNameFromDisposition = (disposition: string | null): string | null
   return basicMatch?.[1] ?? null;
 };
 
+const parseMessageStatus = (body: unknown): MetaSendMessageResponse["messageStatus"] => {
+  if (!Array.isArray((body as { messages?: unknown[] } | null)?.messages)) {
+    return null;
+  }
+
+  const rawStatus = (body as { messages?: Array<{ message_status?: unknown }> }).messages?.[0]?.message_status;
+
+  return rawStatus === "accepted" || rawStatus === "sent" ? rawStatus : null;
+};
+
 export class MetaCloudApiClient {
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
@@ -278,12 +288,7 @@ export class MetaCloudApiClient {
 
     return {
       messageId,
-      messageStatus:
-        (Array.isArray((body as { messages?: unknown[] } | null)?.messages)
-          ? ((body as { messages?: Array<{ message_status?: unknown }> }).messages?.[0]?.message_status ?? null)
-          : null) === "accepted"
-          ? "accepted"
-          : null,
+      messageStatus: parseMessageStatus(body),
       payloadRaw: body
     };
   }

@@ -36,6 +36,13 @@ export const registerMetaWebhookRoutes = (
       challenge: query["hub.challenge"]
     });
 
+    request.log.info(
+      {
+        connectionKey: params.connectionKey
+      },
+      "Meta webhook verified"
+    );
+
     return reply.type("text/plain").send(challenge);
   });
 
@@ -47,6 +54,16 @@ export const registerMetaWebhookRoutes = (
       signatureHeader: parseSignatureHeader(request.headers["x-hub-signature-256"]),
       payload: request.body
     });
+
+    request.log.info(
+      {
+        connectionKey: params.connectionKey,
+        processedMessages: result.processedMessages,
+        processedStatuses: result.processedStatuses,
+        ignoredEvents: result.ignoredEvents
+      },
+      "Meta webhook processed"
+    );
 
     return reply.status(200).send({
       received: true,

@@ -129,7 +129,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     return {
       providerMessageId: response.messageId,
       payloadRaw: response.payloadRaw,
-      status: response.messageStatus ?? "sent",
+      status: response.messageStatus ?? "accepted",
       sentAt: new Date()
     };
   }

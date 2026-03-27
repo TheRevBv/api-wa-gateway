@@ -54,6 +54,19 @@ export const registerMessageRoutes = (
       content: body.content
     });
 
+    request.log.info(
+      {
+        tenantId: params.tenantId,
+        conversationId: result.conversation.id,
+        messageId: result.message.id,
+        provider: result.message.provider,
+        providerMessageId: result.message.providerMessageId,
+        messageType: result.message.type,
+        status: result.message.status
+      },
+      "Outbound message dispatched"
+    );
+
     return reply.status(201).send({
       contact: toContactResponse(result.contact),
       conversation: toConversationResponse(result.conversation),
