@@ -31,7 +31,8 @@ describe("DefaultMetaWebhookService", () => {
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
       new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
-      repositories.messages
+      repositories.messages,
+      new RecordingWebhookDispatchService()
     );
 
     const challenge = await service.verifyWebhook({
@@ -64,7 +65,8 @@ describe("DefaultMetaWebhookService", () => {
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
       receiveInboundMessage,
-      repositories.messages
+      repositories.messages,
+      webhookDispatchService
     );
     const body = JSON.stringify({
       object: "whatsapp_business_account",
@@ -168,10 +170,12 @@ describe("DefaultMetaWebhookService", () => {
         }
       })
     );
+    const webhookDispatchService = new RecordingWebhookDispatchService();
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
       new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
-      repositories.messages
+      repositories.messages,
+      webhookDispatchService
     );
     const body = JSON.stringify({
       object: "whatsapp_business_account",
@@ -221,6 +225,7 @@ describe("DefaultMetaWebhookService", () => {
         })
       ]
     });
+    expect(webhookDispatchService.dispatchedStatusUpdates).toHaveLength(1);
   });
 
   it("rejects invalid signatures", async () => {
@@ -240,7 +245,8 @@ describe("DefaultMetaWebhookService", () => {
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
       new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
-      repositories.messages
+      repositories.messages,
+      new RecordingWebhookDispatchService()
     );
 
     await expect(
@@ -274,7 +280,8 @@ describe("DefaultMetaWebhookService", () => {
     const service = new DefaultMetaWebhookService(
       repositories.providerConnections,
       new ReceiveInboundMessageUseCase(repositories, new RecordingWebhookDispatchService()),
-      repositories.messages
+      repositories.messages,
+      new RecordingWebhookDispatchService()
     );
     const body = JSON.stringify({
       object: "whatsapp_business_account",

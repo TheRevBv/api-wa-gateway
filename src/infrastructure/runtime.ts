@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 
 import { DefaultWebhookDispatchService } from "../application/services/webhook-delivery-service";
 import type { MetaWebhookService } from "../application/ports/meta-webhook-service";
+import { DownloadMessageMediaUseCase } from "../application/use-cases/download-message-media";
 import { GetConversationUseCase } from "../application/use-cases/get-conversation";
 import { ListConversationMessagesUseCase } from "../application/use-cases/list-conversation-messages";
 import { ListConversationsUseCase } from "../application/use-cases/list-conversations";
@@ -13,6 +14,7 @@ import type { Environment } from "../config/env";
 import { createDatabaseConnection } from "./database/client";
 import { BaileysWhatsAppProvider } from "./providers/baileys-whatsapp-provider";
 import { DefaultMetaWebhookService } from "./providers/meta-webhook-service";
+import { MetaProviderTemplateManagementService } from "./providers/meta-provider-template-management-service";
 import { MetaWhatsAppProvider } from "./providers/meta-whatsapp-provider";
 import { DefaultWhatsAppProviderRegistry } from "./providers/provider-registry";
 import {
@@ -20,7 +22,11 @@ import {
   PostgresConversationRepository,
   PostgresMessageRepository
 } from "./repositories/postgres-messaging-repositories";
-import { PostgresTenantRepository, PostgresProviderConnectionRepository } from "./repositories/postgres-tenant-provider-repositories";
+import {
+  PostgresTenantRepository,
+  PostgresProviderConnectionRepository,
+  PostgresProviderMessageTemplateRepository
+} from "./repositories/postgres-tenant-provider-repositories";
 import {
   PostgresWebhookDispatchRepository,
   PostgresWebhookSubscriptionRepository
@@ -32,9 +38,12 @@ export interface RuntimeServices {
   listConversations: ListConversationsUseCase;
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
+  downloadMessageMedia: DownloadMessageMediaUseCase;
+  metaProviderTemplateManagement: MetaProviderTemplateManagementService;
   metaWebhookService: MetaWebhookService;
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
+  gatewaySharedSecret: string;
 }
 
 export interface RuntimeContext {
@@ -51,6 +60,7 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     conversations: new PostgresConversationRepository(connection.db),
     messages: new PostgresMessageRepository(connection.db),
     providerConnections: new PostgresProviderConnectionRepository(connection.db),
+    providerMessageTemplates: new PostgresProviderMessageTemplateRepository(connection.db),
     webhookSubscriptions: new PostgresWebhookSubscriptionRepository(connection.db),
     webhookDispatches: new PostgresWebhookDispatchRepository(connection.db)
   };
@@ -75,10 +85,15 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     logger
   );
   const metaProvider = new MetaWhatsAppProvider();
+  const metaProviderTemplateManagement = new MetaProviderTemplateManagementService(
+    repositories.providerConnections,
+    repositories.providerMessageTemplates
+  );
   const metaWebhookService = new DefaultMetaWebhookService(
     repositories.providerConnections,
     receiveInboundMessage,
-    repositories.messages
+    repositories.messages,
+    webhookDispatchService
   );
   const providerRegistry = new DefaultWhatsAppProviderRegistry([baileysProvider, metaProvider]);
 
@@ -88,9 +103,12 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
       listConversations: new ListConversationsUseCase(repositories),
       getConversation: new GetConversationUseCase(repositories),
       listConversationMessages: new ListConversationMessagesUseCase(repositories),
+      downloadMessageMedia: new DownloadMessageMediaUseCase(repositories, providerRegistry),
+      metaProviderTemplateManagement,
       metaWebhookService,
       baileysSessionView: baileysProvider,
-      baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN
+      baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN,
+      gatewaySharedSecret: env.GATEWAY_SHARED_SECRET
     },
     providerRuntimes: [baileysProvider],
     close: async () => {

@@ -4,7 +4,7 @@ import { MetaWhatsAppProvider } from "../../src/infrastructure/providers/meta-wh
 import { createProviderConnection } from "../support/in-memory-dependencies";
 
 describe("MetaWhatsAppProvider", () => {
-  it("maps text messages to the Cloud API payload", async () => {
+  it("maps text messages to the Cloud API payload and defaults the initial status to accepted", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -53,23 +53,46 @@ describe("MetaWhatsAppProvider", () => {
       }
     });
     expect(result.providerMessageId).toBe("wamid.123");
-    expect(result.status).toBe("sent");
+    expect(result.status).toBe("accepted");
   });
 
   it("maps document messages with filename", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          messages: [{ id: "wamid.456" }]
-        }),
-        {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("pdf-content", {
           status: 200,
           headers: {
-            "content-type": "application/json"
+            "content-type": "application/pdf"
           }
-        }
+        })
       )
-    );
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "meta-media-1"
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            messages: [{ id: "wamid.456" }]
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+      );
     const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
 
     await provider.sendMessage({
@@ -92,14 +115,17 @@ describe("MetaWhatsAppProvider", () => {
       }
     });
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://example.com/test.pdf");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://graph.facebook.com/v23.0/1234567890/media");
+    const [, init] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: "5215512345678",
       type: "document",
       document: {
-        link: "https://example.com/test.pdf",
+        id: "meta-media-1",
         caption: "demo document",
         filename: "test.pdf"
       }
@@ -149,6 +175,59 @@ describe("MetaWhatsAppProvider", () => {
     });
   });
 
+  it("downloads inbound media through the Cloud API lookup flow", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: "https://lookaside.facebook.com/download/media-1",
+            mime_type: "image/png"
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response("png-binary", {
+          status: 200,
+          headers: {
+            "content-type": "image/png",
+            "content-length": "10",
+            "content-disposition": "inline; filename=\"photo.png\""
+          }
+        })
+      );
+    const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
+
+    const result = await provider.downloadMedia({
+      connection: createProviderConnection({
+        provider: "meta",
+        connectionKey: "1234567890",
+        config: {
+          accessToken: "meta-token",
+          verifyToken: "verify-token",
+          appSecret: "app-secret",
+          apiVersion: "v23.0"
+        }
+      }),
+      providerMediaId: "meta-media-1",
+      fallbackFileName: "fallback.png"
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://graph.facebook.com/v23.0/meta-media-1");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://lookaside.facebook.com/download/media-1");
+    expect(result.contentType).toBe("image/png");
+    expect(result.fileName).toBe("photo.png");
+    expect(result.contentLength).toBe(10);
+    expect(Buffer.from(result.content).toString("utf8")).toBe("png-binary");
+  });
+
   it("maps template messages and preserves accepted provider status", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -180,7 +259,8 @@ describe("MetaWhatsAppProvider", () => {
       content: {
         type: "template",
         name: "hello_world",
-        languageCode: "en_US"
+        languageCode: "en_US",
+        bodyParameters: ["Citizen", 3]
       }
     });
 
@@ -194,10 +274,63 @@ describe("MetaWhatsAppProvider", () => {
         name: "hello_world",
         language: {
           code: "en_US"
-        }
+        },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              {
+                type: "text",
+                text: "Citizen"
+              },
+              {
+                type: "text",
+                text: "3"
+              }
+            ]
+          }
+        ]
       }
     });
     expect(result.providerMessageId).toBe("wamid.template-1");
     expect(result.status).toBe("accepted");
+  });
+
+  it("preserves an explicit sent provider status when Meta returns it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          messages: [{ id: "wamid.text-1", message_status: "sent" }]
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      )
+    );
+    const provider = new MetaWhatsAppProvider(new MetaCloudApiClient(fetchMock as typeof fetch));
+
+    const result = await provider.sendMessage({
+      connection: createProviderConnection({
+        provider: "meta",
+        connectionKey: "1234567890",
+        config: {
+          accessToken: "meta-token",
+          verifyToken: "verify-token",
+          appSecret: "app-secret",
+          apiVersion: "v25.0"
+        }
+      }),
+      to: "5215512345678",
+      content: {
+        type: "text",
+        text: "hola meta"
+      }
+    });
+
+    expect(result.providerMessageId).toBe("wamid.text-1");
+    expect(result.status).toBe("sent");
   });
 });

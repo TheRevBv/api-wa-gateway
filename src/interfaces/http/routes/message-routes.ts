@@ -30,7 +30,8 @@ const sendMessageBodySchema = z.object({
     z.object({
       type: z.literal("template"),
       name: z.string().min(1),
-      languageCode: z.string().min(1).optional()
+      languageCode: z.string().min(1).optional(),
+      bodyParameters: z.array(z.union([z.string(), z.number()])).max(10).optional()
     })
   ])
 });
@@ -52,6 +53,19 @@ export const registerMessageRoutes = (
       to: body.to,
       content: body.content
     });
+
+    request.log.info(
+      {
+        tenantId: params.tenantId,
+        conversationId: result.conversation.id,
+        messageId: result.message.id,
+        provider: result.message.provider,
+        providerMessageId: result.message.providerMessageId,
+        messageType: result.message.type,
+        status: result.message.status
+      },
+      "Outbound message dispatched"
+    );
 
     return reply.status(201).send({
       contact: toContactResponse(result.contact),

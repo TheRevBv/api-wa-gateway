@@ -1,7 +1,12 @@
 import type { MessageWithConversationContext } from "./repositories";
+import type { MessageStatus } from "../../domain/messaging/message";
 
 export interface WebhookDispatchService {
   dispatchInboundMessage(context: MessageWithConversationContext): Promise<void>;
+  dispatchMessageStatusUpdated(input: {
+    context: MessageWithConversationContext;
+    previousStatus: MessageStatus;
+  }): Promise<void>;
 }
 
 export interface WebhookHttpRequest {

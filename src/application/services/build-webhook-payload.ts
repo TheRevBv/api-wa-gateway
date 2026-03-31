@@ -1,7 +1,7 @@
+import type { MessageStatus } from "../../domain/messaging/message";
 import type { MessageWithConversationContext } from "../ports/repositories";
 
-export interface InboundMessageWebhookPayload {
-  event: "message.received";
+interface MessageWebhookPayloadBase {
   occurredAt: string;
   tenant: {
     id: string;
@@ -35,27 +35,41 @@ export interface InboundMessageWebhookPayload {
   };
 }
 
-export const buildInboundMessageWebhookPayload = (
-  context: MessageWithConversationContext
-): InboundMessageWebhookPayload => ({
-  event: "message.received",
-  occurredAt: context.message.receivedAt?.toISOString() ?? context.message.createdAt.toISOString(),
+export interface InboundMessageWebhookPayload extends MessageWebhookPayloadBase {
+  event: "message.received";
+}
+
+export interface MessageStatusUpdatedWebhookPayload
+  extends Omit<MessageWebhookPayloadBase, "message"> {
+  event: "message.status.updated";
+  message: MessageWebhookPayloadBase["message"] & {
+    previousStatus: MessageStatus;
+  };
+}
+
+const buildMessageWebhookPayloadBase = (
+  context: MessageWithConversationContext,
+): MessageWebhookPayloadBase => ({
+  occurredAt:
+    context.message.receivedAt?.toISOString() ??
+    context.message.sentAt?.toISOString() ??
+    context.message.createdAt.toISOString(),
   tenant: {
     id: context.tenant.id,
-    name: context.tenant.name
+    name: context.tenant.name,
   },
   conversation: {
     id: context.conversation.id,
     channel: context.conversation.channel,
     status: context.conversation.status,
     startedAt: context.conversation.startedAt.toISOString(),
-    lastMessageAt: context.conversation.lastMessageAt.toISOString()
+    lastMessageAt: context.conversation.lastMessageAt.toISOString(),
   },
   contact: {
     id: context.contact.id,
     phone: context.contact.phone,
     displayName: context.contact.displayName,
-    providerContactId: context.contact.providerContactId
+    providerContactId: context.contact.providerContactId,
   },
   message: {
     id: context.message.id,
@@ -68,6 +82,29 @@ export const buildInboundMessageWebhookPayload = (
     status: context.message.status,
     sentAt: context.message.sentAt?.toISOString() ?? null,
     receivedAt: context.message.receivedAt?.toISOString() ?? null,
-    createdAt: context.message.createdAt.toISOString()
-  }
+    createdAt: context.message.createdAt.toISOString(),
+  },
 });
+
+export const buildInboundMessageWebhookPayload = (
+  context: MessageWithConversationContext,
+): InboundMessageWebhookPayload => ({
+  event: "message.received",
+  ...buildMessageWebhookPayloadBase(context),
+});
+
+export const buildMessageStatusUpdatedWebhookPayload = (
+  context: MessageWithConversationContext,
+  previousStatus: MessageStatus,
+): MessageStatusUpdatedWebhookPayload => {
+  const base = buildMessageWebhookPayloadBase(context);
+
+  return {
+    event: "message.status.updated",
+    ...base,
+    message: {
+      ...base.message,
+      previousStatus,
+    },
+  };
+};

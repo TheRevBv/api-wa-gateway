@@ -54,9 +54,24 @@ export interface ProviderSendMessageResult {
   sentAt: Date | null;
 }
 
+export interface ProviderDownloadMediaCommand {
+  connection: ProviderConnection;
+  providerMediaId: string;
+  fallbackMimeType?: string;
+  fallbackFileName?: string;
+}
+
+export interface ProviderDownloadMediaResult {
+  contentType: string;
+  fileName: string | null;
+  contentLength: number | null;
+  content: ArrayBuffer;
+}
+
 export interface WhatsAppProvider {
   readonly providerName: ProviderName;
   sendMessage(command: ProviderSendMessageCommand): Promise<ProviderSendMessageResult>;
+  downloadMedia(command: ProviderDownloadMediaCommand): Promise<ProviderDownloadMediaResult>;
 }
 
 export interface ProviderRuntime {

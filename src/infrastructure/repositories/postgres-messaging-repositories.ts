@@ -3,10 +3,16 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 import type {
   ContactRepository,
   ConversationRepository,
+  MessageWithConversationContext,
   MessageRepository
 } from "../../application/ports/repositories";
 import type { DatabaseClient } from "../database/client";
-import { contactsTable, conversationsTable, messagesTable } from "../database/schema";
+import {
+  contactsTable,
+  conversationsTable,
+  messagesTable,
+  tenantsTable
+} from "../database/schema";
 
 const appendProviderStatusEvent = (current: unknown, event: unknown): unknown => {
   if (event === undefined) {
@@ -178,6 +184,24 @@ export class PostgresMessageRepository implements MessageRepository {
     return message ?? null;
   }
 
+  async findContextByMessageId(id: string): Promise<MessageWithConversationContext | null> {
+    const [record] = await this.db
+      .select({
+        tenant: tenantsTable,
+        contact: contactsTable,
+        conversation: conversationsTable,
+        message: messagesTable
+      })
+      .from(messagesTable)
+      .innerJoin(conversationsTable, eq(messagesTable.conversationId, conversationsTable.id))
+      .innerJoin(contactsTable, eq(messagesTable.contactId, contactsTable.id))
+      .innerJoin(tenantsTable, eq(messagesTable.tenantId, tenantsTable.id))
+      .where(eq(messagesTable.id, id))
+      .limit(1);
+
+    return record ?? null;
+  }
+
   async findByProviderMessageId(tenantId: string, provider: "baileys" | "meta", providerMessageId: string) {
     const [message] = await this.db
       .select()
@@ -233,7 +257,7 @@ export class PostgresMessageRepository implements MessageRepository {
     status: "received" | "accepted" | "sent" | "delivered" | "read" | "failed";
     sentAt?: Date | null;
     payloadRaw?: unknown;
-  }) {
+  }): Promise<{ message: typeof messagesTable.$inferSelect; previousStatus: typeof messagesTable.$inferSelect.status } | null> {
     const existing = await this.findByProviderMessageId(
       input.tenantId,
       input.provider,
@@ -243,6 +267,8 @@ export class PostgresMessageRepository implements MessageRepository {
     if (!existing) {
       return null;
     }
+
+    const previousStatus = existing.status;
 
     const [message] = await this.db
       .update(messagesTable)
@@ -254,7 +280,12 @@ export class PostgresMessageRepository implements MessageRepository {
       .where(eq(messagesTable.id, existing.id))
       .returning();
 
-    return message ?? null;
+    return message
+      ? {
+          message,
+          previousStatus
+        }
+      : null;
   }
 
   async listByConversation(tenantId: string, conversationId: string, query: { limit: number; offset: number }) {

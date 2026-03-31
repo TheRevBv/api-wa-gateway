@@ -38,6 +38,7 @@ export interface TemplateMessageContent {
   type: "template";
   name: string;
   languageCode?: string;
+  bodyParameters?: Array<string | number>;
 }
 
 export type MessageContent =

@@ -15,6 +15,12 @@ const run = async (): Promise<void> => {
     throw new Error("META_PHONE_NUMBER_ID is required to sync the Meta provider connection");
   }
 
+  if (!env.META_WHATSAPP_BUSINESS_ACCOUNT_ID) {
+    throw new Error(
+      "META_WHATSAPP_BUSINESS_ACCOUNT_ID is required to sync the Meta provider connection"
+    );
+  }
+
   if (!env.META_ACCESS_TOKEN) {
     throw new Error("META_ACCESS_TOKEN is required to sync the Meta provider connection");
   }
@@ -55,7 +61,8 @@ const run = async (): Promise<void> => {
     const providerConfig: Record<string, unknown> = {
       accessToken: env.META_ACCESS_TOKEN,
       apiVersion: env.META_API_VERSION,
-      baseUrl: env.META_BASE_URL
+      baseUrl: env.META_BASE_URL,
+      whatsappBusinessAccountId: env.META_WHATSAPP_BUSINESS_ACCOUNT_ID
     };
 
     if (env.META_VERIFY_TOKEN) {
@@ -111,6 +118,7 @@ const run = async (): Promise<void> => {
     console.log(`Meta provider synced for tenant ${tenant.id} (${tenant.name})`);
     console.log(`Provider connection ID: ${providerConnectionId}`);
     console.log(`Phone number ID / connection key: ${env.META_PHONE_NUMBER_ID}`);
+    console.log(`WhatsApp business account ID: ${env.META_WHATSAPP_BUSINESS_ACCOUNT_ID}`);
     console.log(`Status: ${env.META_ACTIVATE ? "active" : "inactive"}`);
 
     if (warnings.length > 0) {

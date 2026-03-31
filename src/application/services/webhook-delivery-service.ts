@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 
+import type { MessageStatus } from "../../domain/messaging/message";
 import type { WebhookHttpClient, WebhookDispatchService } from "../ports/webhook-dispatcher";
 import type {
   MessageWithConversationContext,
@@ -7,7 +8,12 @@ import type {
   WebhookSubscriptionRepository
 } from "../ports/repositories";
 import { createId } from "./id";
-import { buildInboundMessageWebhookPayload } from "./build-webhook-payload";
+import {
+  buildInboundMessageWebhookPayload,
+  buildMessageStatusUpdatedWebhookPayload,
+  type InboundMessageWebhookPayload,
+  type MessageStatusUpdatedWebhookPayload
+} from "./build-webhook-payload";
 
 export interface DefaultWebhookDispatchServiceOptions {
   timeoutMs: number;
@@ -23,13 +29,35 @@ export class DefaultWebhookDispatchService implements WebhookDispatchService {
   ) {}
 
   async dispatchInboundMessage(context: MessageWithConversationContext): Promise<void> {
+    await this.dispatchMessageWebhook(
+      context,
+      buildInboundMessageWebhookPayload(context)
+    );
+  }
+
+  async dispatchMessageStatusUpdated(input: {
+    context: MessageWithConversationContext;
+    previousStatus: MessageStatus;
+  }): Promise<void> {
+    await this.dispatchMessageWebhook(
+      input.context,
+      buildMessageStatusUpdatedWebhookPayload(
+        input.context,
+        input.previousStatus
+      )
+    );
+  }
+
+  private async dispatchMessageWebhook(
+    context: MessageWithConversationContext,
+    payload: InboundMessageWebhookPayload | MessageStatusUpdatedWebhookPayload
+  ): Promise<void> {
     const subscription = await this.subscriptionRepository.findActiveByTenantId(context.tenant.id);
 
     if (!subscription) {
       return;
     }
 
-    const payload = buildInboundMessageWebhookPayload(context);
     const dispatch = await this.dispatchRepository.create({
       id: createId(),
       tenantId: context.tenant.id,

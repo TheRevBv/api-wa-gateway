@@ -63,7 +63,8 @@ describe("SendOutboundMessageUseCase", () => {
       content: {
         type: "template",
         name: "hello_world",
-        languageCode: "en_US"
+        languageCode: "en_US",
+        bodyParameters: ["TI-12345", 48]
       }
     });
 
@@ -71,6 +72,12 @@ describe("SendOutboundMessageUseCase", () => {
     expect(result.message.type).toBe("template");
     expect(result.message.body).toBe("hello_world");
     expect(result.message.media).toBeNull();
+    expect(provider.sentCommands[0]?.content).toEqual({
+      type: "template",
+      name: "hello_world",
+      languageCode: "en_US",
+      bodyParameters: ["TI-12345", 48]
+    });
   });
 
   it("normalizes Mexico Meta recipient numbers before creating the contact identity", async () => {

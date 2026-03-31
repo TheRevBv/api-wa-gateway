@@ -5,6 +5,7 @@ import type { HttpRouteDependencies } from "./routes/dependencies";
 import { registerBaileysAuthRoutes } from "./routes/baileys-auth-routes";
 import { registerConversationRoutes } from "./routes/conversation-routes";
 import { registerHealthRoutes } from "./routes/health-routes";
+import { registerInternalRoutes } from "./routes/internal-routes";
 import { registerMessageRoutes } from "./routes/message-routes";
 import { registerMetaWebhookRoutes } from "./routes/meta-webhook-routes";
 
@@ -17,4 +18,5 @@ export const registerRoutes = (
   registerMetaWebhookRoutes(app, dependencies);
   registerMessageRoutes(app, dependencies);
   registerConversationRoutes(app, dependencies);
+  registerInternalRoutes(app, dependencies);
 };
