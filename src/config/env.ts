@@ -18,6 +18,7 @@ const environmentSchema = z.object({
   META_PROVIDER_CONNECTION_ID: z.string().default("meta_demo_connection"),
   META_PROVIDER_DISPLAY_NAME: z.string().default("Local Meta Cloud API"),
   META_PHONE_NUMBER_ID: z.string().default(""),
+  META_WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().default(""),
   META_ACCESS_TOKEN: z.string().default(""),
   META_VERIFY_TOKEN: z.string().default(""),
   META_APP_SECRET: z.string().default(""),

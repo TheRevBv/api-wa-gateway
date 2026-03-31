@@ -10,6 +10,32 @@ const mediaParamsSchema = z.object({
   messageId: z.string().uuid()
 });
 
+const providerTemplateConnectionParamsSchema = z.object({
+  connectionId: z.string().min(1)
+});
+
+const providerTemplateByIdParamsSchema = z.object({
+  connectionId: z.string().min(1),
+  externalTemplateId: z.string().min(1)
+});
+
+const providerTemplateByNameParamsSchema = z.object({
+  connectionId: z.string().min(1),
+  name: z.string().min(1)
+});
+
+const publishProviderTemplateBodySchema = z.object({
+  name: z.string().min(1),
+  languageCode: z.string().min(1),
+  category: z.string().min(1),
+  bodyText: z.string().min(1),
+  exampleValues: z.array(z.string()).default([])
+});
+
+const syncProviderTemplateByNameQuerySchema = z.object({
+  languageCode: z.string().min(1)
+});
+
 const assertGatewaySharedSecret = (
   providedSecret: string | string[] | undefined,
   expectedSecret: string
@@ -28,6 +54,79 @@ export const registerInternalRoutes = (
   app: FastifyInstance<any, any, any, Logger>,
   dependencies: HttpRouteDependencies
 ): void => {
+  app.post("/api/internal/providers/meta/connections/:connectionId/templates", async (request) => {
+    assertGatewaySharedSecret(
+      request.headers["x-gateway-shared-secret"],
+      dependencies.gatewaySharedSecret
+    );
+
+    const params = providerTemplateConnectionParamsSchema.parse(request.params);
+    const body = publishProviderTemplateBodySchema.parse(request.body);
+    const result = await dependencies.metaProviderTemplateManagement.publishTemplate({
+      connectionId: params.connectionId,
+      name: body.name,
+      languageCode: body.languageCode,
+      category: body.category,
+      bodyText: body.bodyText,
+      exampleValues: body.exampleValues
+    });
+
+    return {
+      data: {
+        ...result.record,
+        rawProviderResponse: result.rawProviderResponse
+      }
+    };
+  });
+
+  app.get(
+    "/api/internal/providers/meta/connections/:connectionId/templates/by-name/:name",
+    async (request) => {
+      assertGatewaySharedSecret(
+        request.headers["x-gateway-shared-secret"],
+        dependencies.gatewaySharedSecret
+      );
+
+      const params = providerTemplateByNameParamsSchema.parse(request.params);
+      const query = syncProviderTemplateByNameQuerySchema.parse(request.query);
+      const result = await dependencies.metaProviderTemplateManagement.syncTemplateStatusByName({
+        connectionId: params.connectionId,
+        name: params.name,
+        languageCode: query.languageCode
+      });
+
+      return {
+        data: {
+          ...result.record,
+          rawProviderResponse: result.rawProviderResponse
+        }
+      };
+    }
+  );
+
+  app.get(
+    "/api/internal/providers/meta/connections/:connectionId/templates/:externalTemplateId",
+    async (request) => {
+      assertGatewaySharedSecret(
+        request.headers["x-gateway-shared-secret"],
+        dependencies.gatewaySharedSecret
+      );
+
+      const params = providerTemplateByIdParamsSchema.parse(request.params);
+      const result = await dependencies.metaProviderTemplateManagement.syncTemplateStatusById({
+        connectionId: params.connectionId,
+        externalTemplateId: params.externalTemplateId
+      });
+
+      return {
+        data: {
+          ...result.record,
+          rawProviderResponse: result.rawProviderResponse
+        }
+      };
+    }
+  );
+
   app.get("/api/internal/tenants/:tenantId/messages/:messageId/media", async (request, reply) => {
     assertGatewaySharedSecret(
       request.headers["x-gateway-shared-secret"],

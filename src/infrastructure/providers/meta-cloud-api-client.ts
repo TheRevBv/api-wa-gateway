@@ -41,6 +41,36 @@ export interface MetaDownloadMediaResponse {
   content: ArrayBuffer;
 }
 
+export interface MetaCreateTemplateRequest {
+  accessToken: string;
+  apiVersion: string;
+  baseUrl: string;
+  whatsappBusinessAccountId: string;
+  name: string;
+  languageCode: string;
+  category: string;
+  bodyText: string;
+  exampleValues: string[];
+}
+
+export interface MetaProviderTemplate {
+  id: string | null;
+  name: string;
+  languageCode: string;
+  category: string;
+  status: string;
+  payloadRaw: unknown;
+}
+
+export interface MetaFindTemplateByNameRequest {
+  accessToken: string;
+  apiVersion: string;
+  baseUrl: string;
+  whatsappBusinessAccountId: string;
+  name: string;
+  languageCode?: string;
+}
+
 const parseResponseBody = async (response: Response): Promise<unknown> => {
   const text = await response.text();
 
@@ -102,8 +132,163 @@ const parseMessageStatus = (body: unknown): MetaSendMessageResponse["messageStat
   return rawStatus === "accepted" || rawStatus === "sent" ? rawStatus : null;
 };
 
+const toMetaProviderTemplate = (body: unknown): MetaProviderTemplate => {
+  if (typeof body !== "object" || body === null) {
+    throw new ApplicationError("Meta returned an invalid template response", {
+      code: "provider_template_management_failed",
+      statusCode: 502
+    });
+  }
+
+  const record = body as {
+    id?: unknown;
+    name?: unknown;
+    language?: unknown;
+    status?: unknown;
+    category?: unknown;
+  };
+
+  const name = typeof record.name === "string" ? record.name : null;
+  const languageCode = typeof record.language === "string" ? record.language : null;
+  const status = typeof record.status === "string" ? record.status : null;
+  const category = typeof record.category === "string" ? record.category : null;
+
+  if (!name || !languageCode || !status || !category) {
+    throw new ApplicationError("Meta returned an invalid template response", {
+      code: "provider_template_management_failed",
+      statusCode: 502
+    });
+  }
+
+  return {
+    id: typeof record.id === "string" ? record.id : null,
+    name,
+    languageCode,
+    category,
+    status,
+    payloadRaw: body
+  };
+};
+
+const parseTemplateList = (body: unknown): MetaProviderTemplate[] => {
+  if (!Array.isArray((body as { data?: unknown[] } | null)?.data)) {
+    return [];
+  }
+
+  return (body as { data: unknown[] }).data.map((item) => toMetaProviderTemplate(item));
+};
+
 export class MetaCloudApiClient {
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+
+  async createTemplate(request: MetaCreateTemplateRequest): Promise<MetaProviderTemplate> {
+    const response = await this.fetchImpl(
+      `${request.baseUrl.replace(/\/$/, "")}/${request.apiVersion}/${request.whatsappBusinessAccountId}/message_templates`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${request.accessToken}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          name: request.name,
+          language: request.languageCode,
+          category: request.category,
+          components: [
+            {
+              type: "BODY",
+              text: request.bodyText,
+              ...(request.exampleValues.length > 0
+                ? {
+                    example: {
+                      body_text: [request.exampleValues]
+                    }
+                  }
+                : {})
+            }
+          ]
+        })
+      }
+    );
+    const body = await parseResponseBody(response);
+
+    if (!response.ok) {
+      const detail = extractMetaErrorMessage(body);
+      throw new ApplicationError(
+        detail ? `Meta rejected the template publication: ${detail}` : "Meta rejected the template publication",
+        {
+          code: "provider_template_management_failed",
+          statusCode: 502
+        }
+      );
+    }
+
+    return toMetaProviderTemplate(body);
+  }
+
+  async getTemplateById(input: {
+    accessToken: string;
+    apiVersion: string;
+    baseUrl: string;
+    externalTemplateId: string;
+  }): Promise<MetaProviderTemplate> {
+    const response = await this.fetchImpl(
+      `${input.baseUrl.replace(/\/$/, "")}/${input.apiVersion}/${input.externalTemplateId}`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${input.accessToken}`
+        }
+      }
+    );
+    const body = await parseResponseBody(response);
+
+    if (!response.ok) {
+      const detail = extractMetaErrorMessage(body);
+      throw new ApplicationError(
+        detail ? `Meta rejected the template lookup: ${detail}` : "Meta rejected the template lookup",
+        {
+          code: "provider_template_management_failed",
+          statusCode: 502
+        }
+      );
+    }
+
+    return toMetaProviderTemplate(body);
+  }
+
+  async findTemplatesByName(request: MetaFindTemplateByNameRequest): Promise<MetaProviderTemplate[]> {
+    const searchParams = new URLSearchParams({
+      name: request.name
+    });
+    const response = await this.fetchImpl(
+      `${request.baseUrl.replace(/\/$/, "")}/${request.apiVersion}/${request.whatsappBusinessAccountId}/message_templates?${searchParams.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${request.accessToken}`
+        }
+      }
+    );
+    const body = await parseResponseBody(response);
+
+    if (!response.ok) {
+      const detail = extractMetaErrorMessage(body);
+      throw new ApplicationError(
+        detail ? `Meta rejected the template search: ${detail}` : "Meta rejected the template search",
+        {
+          code: "provider_template_management_failed",
+          statusCode: 502
+        }
+      );
+    }
+
+    const templates = parseTemplateList(body);
+
+    return request.languageCode
+      ? templates.filter((template) => template.languageCode === request.languageCode)
+      : templates;
+  }
 
   async uploadMedia(request: MetaUploadMediaRequest): Promise<string> {
     const mediaResponse = await this.fetchImpl(request.mediaUrl, {

@@ -4,6 +4,7 @@ import { ApplicationError } from "../../application/errors/application-error";
 
 const metaProviderConfigSchema = z.object({
   accessToken: z.string().min(1),
+  whatsappBusinessAccountId: z.string().min(1).optional(),
   verifyToken: z.string().min(1),
   appSecret: z.string().min(1),
   apiVersion: z.string().min(1),

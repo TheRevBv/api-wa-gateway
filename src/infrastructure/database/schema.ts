@@ -43,6 +43,41 @@ export const providerConnectionsTable = pgTable(
   ]
 );
 
+export const providerMessageTemplatesTable = pgTable(
+  "provider_message_templates",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenantsTable.id),
+    providerConnectionId: text("provider_connection_id")
+      .notNull()
+      .references(() => providerConnectionsTable.id),
+    provider: text("provider").$type<ProviderName>().notNull(),
+    externalTemplateId: text("external_template_id"),
+    providerTemplateName: text("provider_template_name").notNull(),
+    languageCode: text("language_code").notNull(),
+    category: text("category").notNull(),
+    status: text("status").notNull(),
+    lastError: text("last_error"),
+    payloadRaw: jsonb("payload_raw").$type<unknown>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("provider_message_templates_connection_name_lang_idx").on(
+      table.providerConnectionId,
+      table.providerTemplateName,
+      table.languageCode
+    ),
+    uniqueIndex("provider_message_templates_external_template_idx")
+      .on(table.externalTemplateId)
+      .where(sql`${table.externalTemplateId} is not null`),
+    index("provider_message_templates_tenant_idx").on(table.tenantId),
+    index("provider_message_templates_connection_idx").on(table.providerConnectionId)
+  ]
+);
+
 export const contactsTable = pgTable(
   "contacts",
   {
@@ -171,6 +206,7 @@ export const webhookDispatchesTable = pgTable(
 export const schema = {
   tenantsTable,
   providerConnectionsTable,
+  providerMessageTemplatesTable,
   contactsTable,
   conversationsTable,
   messagesTable,

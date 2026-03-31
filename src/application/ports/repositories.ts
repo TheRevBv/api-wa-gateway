@@ -111,6 +111,7 @@ export interface MessageRepository {
 }
 
 export interface ProviderConnectionRepository {
+  findById(id: string): Promise<ProviderConnection | null>;
   findActiveByTenantId(tenantId: string): Promise<ProviderConnection | null>;
   findActiveByTenantIdAndProvider(
     tenantId: string,
@@ -121,6 +122,46 @@ export interface ProviderConnectionRepository {
     connectionKey: string
   ): Promise<ProviderConnection | null>;
   listActiveByProvider(provider: ProviderName): Promise<ProviderConnection[]>;
+}
+
+export interface ProviderMessageTemplateRecord {
+  id: string;
+  tenantId: string;
+  providerConnectionId: string;
+  provider: ProviderName;
+  externalTemplateId: string | null;
+  providerTemplateName: string;
+  languageCode: string;
+  category: string;
+  status: string;
+  lastError: string | null;
+  payloadRaw: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ProviderMessageTemplateRepository {
+  upsert(input: {
+    tenantId: string;
+    providerConnectionId: string;
+    provider: ProviderName;
+    externalTemplateId: string | null;
+    providerTemplateName: string;
+    languageCode: string;
+    category: string;
+    status: string;
+    lastError: string | null;
+    payloadRaw: unknown;
+  }): Promise<ProviderMessageTemplateRecord>;
+  findByExternalTemplateId(
+    providerConnectionId: string,
+    externalTemplateId: string
+  ): Promise<ProviderMessageTemplateRecord | null>;
+  findByNameAndLanguage(input: {
+    providerConnectionId: string;
+    providerTemplateName: string;
+    languageCode: string;
+  }): Promise<ProviderMessageTemplateRecord | null>;
 }
 
 export interface WebhookSubscriptionRepository {
