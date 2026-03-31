@@ -6,6 +6,7 @@ import { GetConversationUseCase } from "../../src/application/use-cases/get-conv
 import { ListConversationMessagesUseCase } from "../../src/application/use-cases/list-conversation-messages";
 import { ListConversationsUseCase } from "../../src/application/use-cases/list-conversations";
 import { SendOutboundMessageUseCase } from "../../src/application/use-cases/send-outbound-message";
+import { MetaProviderTemplateManagementService } from "../../src/infrastructure/providers/meta-provider-template-management-service";
 import {
   FakeBaileysSessionViewService,
   FakeMetaWebhookService,
@@ -26,6 +27,11 @@ describe("HTTP app", () => {
     const provider = new FakeWhatsAppProvider();
     const baileysSessionView = new FakeBaileysSessionViewService();
     const metaWebhookService = new FakeMetaWebhookService();
+    const metaProviderTemplateManagement = {
+      publishTemplate: vi.fn(),
+      syncTemplateStatusById: vi.fn(),
+      syncTemplateStatusByName: vi.fn()
+    } as unknown as MetaProviderTemplateManagementService;
     baileysSessionView.sessions = [
       {
         connectionId: "connection-1",
@@ -52,6 +58,7 @@ describe("HTTP app", () => {
           repositories,
           new FakeWhatsAppProviderRegistry(provider)
         ),
+        metaProviderTemplateManagement,
         metaWebhookService,
         baileysSessionView,
         baileysDashboardAuthToken: "secret-token",

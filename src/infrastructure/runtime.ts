@@ -14,6 +14,7 @@ import type { Environment } from "../config/env";
 import { createDatabaseConnection } from "./database/client";
 import { BaileysWhatsAppProvider } from "./providers/baileys-whatsapp-provider";
 import { DefaultMetaWebhookService } from "./providers/meta-webhook-service";
+import { MetaProviderTemplateManagementService } from "./providers/meta-provider-template-management-service";
 import { MetaWhatsAppProvider } from "./providers/meta-whatsapp-provider";
 import { DefaultWhatsAppProviderRegistry } from "./providers/provider-registry";
 import {
@@ -21,7 +22,11 @@ import {
   PostgresConversationRepository,
   PostgresMessageRepository
 } from "./repositories/postgres-messaging-repositories";
-import { PostgresTenantRepository, PostgresProviderConnectionRepository } from "./repositories/postgres-tenant-provider-repositories";
+import {
+  PostgresTenantRepository,
+  PostgresProviderConnectionRepository,
+  PostgresProviderMessageTemplateRepository
+} from "./repositories/postgres-tenant-provider-repositories";
 import {
   PostgresWebhookDispatchRepository,
   PostgresWebhookSubscriptionRepository
@@ -34,6 +39,7 @@ export interface RuntimeServices {
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
   downloadMessageMedia: DownloadMessageMediaUseCase;
+  metaProviderTemplateManagement: MetaProviderTemplateManagementService;
   metaWebhookService: MetaWebhookService;
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
@@ -54,6 +60,7 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     conversations: new PostgresConversationRepository(connection.db),
     messages: new PostgresMessageRepository(connection.db),
     providerConnections: new PostgresProviderConnectionRepository(connection.db),
+    providerMessageTemplates: new PostgresProviderMessageTemplateRepository(connection.db),
     webhookSubscriptions: new PostgresWebhookSubscriptionRepository(connection.db),
     webhookDispatches: new PostgresWebhookDispatchRepository(connection.db)
   };
@@ -78,6 +85,10 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     logger
   );
   const metaProvider = new MetaWhatsAppProvider();
+  const metaProviderTemplateManagement = new MetaProviderTemplateManagementService(
+    repositories.providerConnections,
+    repositories.providerMessageTemplates
+  );
   const metaWebhookService = new DefaultMetaWebhookService(
     repositories.providerConnections,
     receiveInboundMessage,
@@ -93,6 +104,7 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
       getConversation: new GetConversationUseCase(repositories),
       listConversationMessages: new ListConversationMessagesUseCase(repositories),
       downloadMessageMedia: new DownloadMessageMediaUseCase(repositories, providerRegistry),
+      metaProviderTemplateManagement,
       metaWebhookService,
       baileysSessionView: baileysProvider,
       baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN,

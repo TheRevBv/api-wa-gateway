@@ -5,6 +5,7 @@ import type { DownloadMessageMediaUseCase } from "../../../application/use-cases
 import type { ListConversationMessagesUseCase } from "../../../application/use-cases/list-conversation-messages";
 import type { ListConversationsUseCase } from "../../../application/use-cases/list-conversations";
 import type { SendOutboundMessageUseCase } from "../../../application/use-cases/send-outbound-message";
+import type { MetaProviderTemplateManagementService } from "../../../infrastructure/providers/meta-provider-template-management-service";
 
 export interface HttpRouteDependencies {
   sendOutboundMessage: SendOutboundMessageUseCase;
@@ -12,6 +13,7 @@ export interface HttpRouteDependencies {
   getConversation: GetConversationUseCase;
   listConversationMessages: ListConversationMessagesUseCase;
   downloadMessageMedia: DownloadMessageMediaUseCase;
+  metaProviderTemplateManagement: MetaProviderTemplateManagementService;
   metaWebhookService: MetaWebhookService;
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;

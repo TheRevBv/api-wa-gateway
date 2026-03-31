@@ -311,6 +311,10 @@ export class InMemoryMessageRepository implements MessageRepository {
 export class InMemoryProviderConnectionRepository implements ProviderConnectionRepository {
   constructor(private readonly items = new Map<string, ProviderConnection>()) {}
 
+  async findById(id: string) {
+    return this.items.get(id) ?? null;
+  }
+
   async findActiveByTenantId(tenantId: string) {
     return (
       [...this.items.values()].find(
