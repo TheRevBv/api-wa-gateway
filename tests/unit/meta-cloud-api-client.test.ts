@@ -59,6 +59,45 @@ describe("MetaCloudApiClient provider templates", () => {
     });
   });
 
+  it("accepts create responses that only return id, status and category", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "meta-template-2",
+          status: "PENDING",
+          category: "UTILITY"
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      )
+    );
+    const client = new MetaCloudApiClient(fetchMock as typeof fetch);
+
+    const result = await client.createTemplate({
+      accessToken: "meta-token",
+      apiVersion: "v25.0",
+      baseUrl: "https://graph.facebook.com",
+      whatsappBusinessAccountId: "waba-123",
+      name: "campaign_notice_minimal",
+      languageCode: "es_MX",
+      category: "UTILITY",
+      bodyText: "Hola {{1}}",
+      exampleValues: ["Joshua"]
+    });
+
+    expect(result).toMatchObject({
+      id: "meta-template-2",
+      name: "campaign_notice_minimal",
+      languageCode: "es_MX",
+      status: "PENDING",
+      category: "UTILITY"
+    });
+  });
+
   it("looks up Meta templates by name and filters by language", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -132,7 +132,14 @@ const parseMessageStatus = (body: unknown): MetaSendMessageResponse["messageStat
   return rawStatus === "accepted" || rawStatus === "sent" ? rawStatus : null;
 };
 
-const toMetaProviderTemplate = (body: unknown): MetaProviderTemplate => {
+const toMetaProviderTemplate = (
+  body: unknown,
+  fallback?: {
+    name?: string;
+    languageCode?: string;
+    category?: string;
+  }
+): MetaProviderTemplate => {
   if (typeof body !== "object" || body === null) {
     throw new ApplicationError("Meta returned an invalid template response", {
       code: "provider_template_management_failed",
@@ -148,10 +155,25 @@ const toMetaProviderTemplate = (body: unknown): MetaProviderTemplate => {
     category?: unknown;
   };
 
-  const name = typeof record.name === "string" ? record.name : null;
-  const languageCode = typeof record.language === "string" ? record.language : null;
+  const name =
+    typeof record.name === "string"
+      ? record.name
+      : typeof fallback?.name === "string"
+        ? fallback.name
+        : null;
+  const languageCode =
+    typeof record.language === "string"
+      ? record.language
+      : typeof fallback?.languageCode === "string"
+        ? fallback.languageCode
+        : null;
   const status = typeof record.status === "string" ? record.status : null;
-  const category = typeof record.category === "string" ? record.category : null;
+  const category =
+    typeof record.category === "string"
+      ? record.category
+      : typeof fallback?.category === "string"
+        ? fallback.category
+        : null;
 
   if (!name || !languageCode || !status || !category) {
     throw new ApplicationError("Meta returned an invalid template response", {
@@ -223,7 +245,11 @@ export class MetaCloudApiClient {
       );
     }
 
-    return toMetaProviderTemplate(body);
+    return toMetaProviderTemplate(body, {
+      name: request.name,
+      languageCode: request.languageCode,
+      category: request.category
+    });
   }
 
   async getTemplateById(input: {
