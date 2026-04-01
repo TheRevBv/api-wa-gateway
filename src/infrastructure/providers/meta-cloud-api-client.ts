@@ -51,6 +51,12 @@ export interface MetaCreateTemplateRequest {
   category: string;
   bodyText: string;
   exampleValues: string[];
+  headerText?: string | null;
+  buttons?: Array<{
+    type: "quick_reply" | "url";
+    text: string;
+    url?: string | null;
+  }>;
 }
 
 export interface MetaProviderTemplate {
@@ -130,6 +136,58 @@ const parseMessageStatus = (body: unknown): MetaSendMessageResponse["messageStat
   const rawStatus = (body as { messages?: Array<{ message_status?: unknown }> }).messages?.[0]?.message_status;
 
   return rawStatus === "accepted" || rawStatus === "sent" ? rawStatus : null;
+};
+
+const buildTemplateComponents = (
+  request: MetaCreateTemplateRequest
+): Array<Record<string, unknown>> => {
+  const components: Array<Record<string, unknown>> = [];
+
+  if (typeof request.headerText === "string" && request.headerText.trim().length > 0) {
+    components.push({
+      type: "HEADER",
+      format: "TEXT",
+      text: request.headerText.trim()
+    });
+  }
+
+  components.push({
+    type: "BODY",
+    text: request.bodyText,
+    ...(request.exampleValues.length > 0
+      ? {
+          example: {
+            body_text: [request.exampleValues]
+          }
+        }
+      : {})
+  });
+
+  const buttons = (request.buttons ?? []).filter(
+    (button) =>
+      button.text.trim().length > 0 &&
+      (button.type !== "url" || typeof button.url === "string")
+  );
+
+  if (buttons.length > 0) {
+    components.push({
+      type: "BUTTONS",
+      buttons: buttons.map((button) =>
+        button.type === "quick_reply"
+          ? {
+              type: "QUICK_REPLY",
+              text: button.text.trim()
+            }
+          : {
+              type: "URL",
+              text: button.text.trim(),
+              url: button.url?.trim() ?? ""
+            }
+      )
+    });
+  }
+
+  return components;
 };
 
 const toMetaProviderTemplate = (
@@ -216,19 +274,7 @@ export class MetaCloudApiClient {
           name: request.name,
           language: request.languageCode,
           category: request.category,
-          components: [
-            {
-              type: "BODY",
-              text: request.bodyText,
-              ...(request.exampleValues.length > 0
-                ? {
-                    example: {
-                      body_text: [request.exampleValues]
-                    }
-                  }
-                : {})
-            }
-          ]
+          components: buildTemplateComponents(request)
         })
       }
     );

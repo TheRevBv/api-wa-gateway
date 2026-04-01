@@ -29,7 +29,18 @@ const publishProviderTemplateBodySchema = z.object({
   languageCode: z.string().min(1),
   category: z.string().min(1),
   bodyText: z.string().min(1),
-  exampleValues: z.array(z.string()).default([])
+  exampleValues: z.array(z.string()).default([]),
+  headerText: z.string().min(1).max(60).optional(),
+  buttons: z
+    .array(
+      z.object({
+        type: z.enum(["quick_reply", "url"]),
+        text: z.string().min(1).max(25),
+        url: z.string().url().optional()
+      })
+    )
+    .max(10)
+    .optional()
 });
 
 const syncProviderTemplateByNameQuerySchema = z.object({
@@ -68,7 +79,9 @@ export const registerInternalRoutes = (
       languageCode: body.languageCode,
       category: body.category,
       bodyText: body.bodyText,
-      exampleValues: body.exampleValues
+      exampleValues: body.exampleValues,
+      headerText: body.headerText,
+      buttons: body.buttons
     });
 
     return {

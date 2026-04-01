@@ -17,6 +17,12 @@ export interface PublishMetaProviderTemplateInput {
   category: string;
   bodyText: string;
   exampleValues: string[];
+  headerText?: string | null;
+  buttons?: Array<{
+    type: "quick_reply" | "url";
+    text: string;
+    url?: string | null;
+  }>;
 }
 
 export interface SyncMetaProviderTemplateStatusByNameInput {
@@ -73,7 +79,9 @@ export class MetaProviderTemplateManagementService {
       languageCode: input.languageCode,
       category: input.category,
       bodyText: input.bodyText,
-      exampleValues: input.exampleValues
+      exampleValues: input.exampleValues,
+      headerText: input.headerText,
+      buttons: input.buttons
     });
 
     return {

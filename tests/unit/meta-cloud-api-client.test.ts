@@ -98,6 +98,85 @@ describe("MetaCloudApiClient provider templates", () => {
     });
   });
 
+  it("publishes a Meta template with header text and buttons", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "meta-template-3",
+          status: "PENDING",
+          category: "UTILITY"
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      )
+    );
+    const client = new MetaCloudApiClient(fetchMock as typeof fetch);
+
+    await client.createTemplate({
+      accessToken: "meta-token",
+      apiVersion: "v25.0",
+      baseUrl: "https://graph.facebook.com",
+      whatsappBusinessAccountId: "waba-123",
+      name: "campaign_notice_buttons",
+      languageCode: "es_MX",
+      category: "UTILITY",
+      bodyText: "Hola {{1}}",
+      exampleValues: ["Joshua"],
+      headerText: "Actualización importante",
+      buttons: [
+        {
+          type: "quick_reply",
+          text: "Confirmar"
+        },
+        {
+          type: "url",
+          text: "Ver detalle",
+          url: "https://example.com/seguimiento"
+        }
+      ]
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: "campaign_notice_buttons",
+      language: "es_MX",
+      category: "UTILITY",
+      components: [
+        {
+          type: "HEADER",
+          format: "TEXT",
+          text: "Actualización importante"
+        },
+        {
+          type: "BODY",
+          text: "Hola {{1}}",
+          example: {
+            body_text: [["Joshua"]]
+          }
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            {
+              type: "QUICK_REPLY",
+              text: "Confirmar"
+            },
+            {
+              type: "URL",
+              text: "Ver detalle",
+              url: "https://example.com/seguimiento"
+            }
+          ]
+        }
+      ]
+    });
+  });
+
   it("looks up Meta templates by name and filters by language", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
