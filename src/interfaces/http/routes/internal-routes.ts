@@ -36,7 +36,7 @@ const publishProviderTemplateBodySchema = z.object({
       z.object({
         type: z.enum(["quick_reply", "url"]),
         text: z.string().min(1).max(25),
-        url: z.string().url().optional()
+        url: z.string().url().nullable().optional()
       })
     )
     .max(10)
@@ -73,6 +73,11 @@ export const registerInternalRoutes = (
 
     const params = providerTemplateConnectionParamsSchema.parse(request.params);
     const body = publishProviderTemplateBodySchema.parse(request.body);
+    const normalizedButtons = body.buttons?.map((button) => ({
+      type: button.type,
+      text: button.text,
+      ...(button.type === "url" && button.url ? { url: button.url } : {})
+    }));
     const result = await dependencies.metaProviderTemplateManagement.publishTemplate({
       connectionId: params.connectionId,
       name: body.name,
@@ -81,7 +86,7 @@ export const registerInternalRoutes = (
       bodyText: body.bodyText,
       exampleValues: body.exampleValues,
       headerText: body.headerText,
-      buttons: body.buttons
+      buttons: normalizedButtons
     });
 
     return {
