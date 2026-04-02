@@ -18,4 +18,5 @@ export interface HttpRouteDependencies {
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
   gatewaySharedSecret: string;
+  gatewayPublicApiBearerToken: string;
 }

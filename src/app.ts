@@ -13,25 +13,29 @@ export interface BuildAppOptions {
 
 export const buildApp = ({ logger, dependencies }: BuildAppOptions) => {
   const app = Fastify({
-    loggerInstance: logger
+    loggerInstance: logger,
   });
 
-  app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
-    const rawBody = typeof body === "string" ? body : body.toString("utf8");
-    request.rawBody = rawBody;
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (request, body, done) => {
+      const rawBody = typeof body === "string" ? body : body.toString("utf8");
+      request.rawBody = rawBody;
 
-    try {
-      done(null, rawBody.length === 0 ? null : JSON.parse(rawBody));
-    } catch {
-      done(
-        new ApplicationError("Request body is not valid JSON", {
-          code: "invalid_json_body",
-          statusCode: 400
-        }),
-        undefined
-      );
-    }
-  });
+      try {
+        done(null, rawBody.length === 0 ? null : JSON.parse(rawBody));
+      } catch {
+        done(
+          new ApplicationError("Request body is not valid JSON", {
+            code: "invalid_json_body",
+            statusCode: 400,
+          }),
+          undefined,
+        );
+      }
+    },
+  );
 
   registerErrorHandler(app);
   registerRoutes(app, dependencies);

@@ -3,7 +3,12 @@ import type { Logger } from "pino";
 import { z } from "zod";
 
 import type { HttpRouteDependencies } from "./dependencies";
-import { toContactResponse, toConversationResponse, toMessageResponse } from "../presenters";
+import { requirePublicApiBearerToken } from "./public-api-auth";
+import {
+  toContactResponse,
+  toConversationResponse,
+  toMessageResponse,
+} from "../presenters";
 
 const sendMessageBodySchema = z.object({
   to: z.string().min(8),
@@ -11,66 +16,76 @@ const sendMessageBodySchema = z.object({
     z.object({
       type: z.literal("text"),
       text: z.string().min(1),
-      previewUrl: z.boolean().optional()
+      previewUrl: z.boolean().optional(),
     }),
     z.object({
       type: z.literal("image"),
       mediaUrl: z.url(),
       mimeType: z.string().optional(),
       caption: z.string().optional(),
-      fileName: z.string().optional()
+      fileName: z.string().optional(),
     }),
     z.object({
       type: z.literal("document"),
       mediaUrl: z.url(),
       mimeType: z.string().optional(),
       caption: z.string().optional(),
-      fileName: z.string().min(1)
+      fileName: z.string().min(1),
     }),
     z.object({
       type: z.literal("template"),
       name: z.string().min(1),
       languageCode: z.string().min(1).optional(),
-      bodyParameters: z.array(z.union([z.string(), z.number()])).max(10).optional()
-    })
-  ])
+      bodyParameters: z
+        .array(z.union([z.string(), z.number()]))
+        .max(10)
+        .optional(),
+    }),
+  ]),
 });
 
 const tenantParamsSchema = z.object({
-  tenantId: z.string().min(1)
+  tenantId: z.string().min(1),
 });
 
 export const registerMessageRoutes = (
   app: FastifyInstance<any, any, any, Logger>,
-  dependencies: HttpRouteDependencies
+  dependencies: HttpRouteDependencies,
 ): void => {
-  app.post("/api/v1/tenants/:tenantId/messages", async (request, reply) => {
-    const params = tenantParamsSchema.parse(request.params);
-    const body = sendMessageBodySchema.parse(request.body);
+  app.post(
+    "/api/v1/tenants/:tenantId/messages",
+    {
+      preHandler: async (request, reply) =>
+        requirePublicApiBearerToken(request, reply, dependencies),
+    },
+    async (request, reply) => {
+      const params = tenantParamsSchema.parse(request.params);
+      const body = sendMessageBodySchema.parse(request.body);
 
-    const result = await dependencies.sendOutboundMessage.execute({
-      tenantId: params.tenantId,
-      to: body.to,
-      content: body.content
-    });
-
-    request.log.info(
-      {
+      const result = await dependencies.sendOutboundMessage.execute({
         tenantId: params.tenantId,
-        conversationId: result.conversation.id,
-        messageId: result.message.id,
-        provider: result.message.provider,
-        providerMessageId: result.message.providerMessageId,
-        messageType: result.message.type,
-        status: result.message.status
-      },
-      "Outbound message dispatched"
-    );
+        to: body.to,
+        content: body.content,
+      });
 
-    return reply.status(201).send({
-      contact: toContactResponse(result.contact),
-      conversation: toConversationResponse(result.conversation),
-      message: toMessageResponse(result.message)
-    });
-  });
+      request.log.info(
+        {
+          tenantId: params.tenantId,
+          conversationId: result.conversation.id,
+          messageId: result.message.id,
+          provider: result.message.provider,
+          providerMessageId: result.message.providerMessageId,
+          messageType: result.message.type,
+          status: result.message.status,
+        },
+        "Outbound message dispatched",
+      );
+
+      return reply.status(201).send({
+        contact: toContactResponse(result.contact),
+        conversation: toConversationResponse(result.conversation),
+        message: toMessageResponse(result.message),
+      });
+    },
+  );
 };

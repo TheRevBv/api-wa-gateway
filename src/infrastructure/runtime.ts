@@ -20,16 +20,16 @@ import { DefaultWhatsAppProviderRegistry } from "./providers/provider-registry";
 import {
   PostgresContactRepository,
   PostgresConversationRepository,
-  PostgresMessageRepository
+  PostgresMessageRepository,
 } from "./repositories/postgres-messaging-repositories";
 import {
   PostgresTenantRepository,
   PostgresProviderConnectionRepository,
-  PostgresProviderMessageTemplateRepository
+  PostgresProviderMessageTemplateRepository,
 } from "./repositories/postgres-tenant-provider-repositories";
 import {
   PostgresWebhookDispatchRepository,
-  PostgresWebhookSubscriptionRepository
+  PostgresWebhookSubscriptionRepository,
 } from "./repositories/postgres-webhook-repositories";
 import { FetchWebhookHttpClient } from "./webhooks/fetch-webhook-http-client";
 
@@ -44,6 +44,7 @@ export interface RuntimeServices {
   baileysSessionView: BaileysSessionViewService;
   baileysDashboardAuthToken: string;
   gatewaySharedSecret: string;
+  gatewayPublicApiBearerToken: string;
 }
 
 export interface RuntimeContext {
@@ -52,17 +53,26 @@ export interface RuntimeContext {
   close(): Promise<void>;
 }
 
-export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeContext => {
+export const createRuntimeContext = (
+  env: Environment,
+  logger: Logger,
+): RuntimeContext => {
   const connection = createDatabaseConnection(env.DATABASE_URL);
   const repositories = {
     tenants: new PostgresTenantRepository(connection.db),
     contacts: new PostgresContactRepository(connection.db),
     conversations: new PostgresConversationRepository(connection.db),
     messages: new PostgresMessageRepository(connection.db),
-    providerConnections: new PostgresProviderConnectionRepository(connection.db),
-    providerMessageTemplates: new PostgresProviderMessageTemplateRepository(connection.db),
-    webhookSubscriptions: new PostgresWebhookSubscriptionRepository(connection.db),
-    webhookDispatches: new PostgresWebhookDispatchRepository(connection.db)
+    providerConnections: new PostgresProviderConnectionRepository(
+      connection.db,
+    ),
+    providerMessageTemplates: new PostgresProviderMessageTemplateRepository(
+      connection.db,
+    ),
+    webhookSubscriptions: new PostgresWebhookSubscriptionRepository(
+      connection.db,
+    ),
+    webhookDispatches: new PostgresWebhookDispatchRepository(connection.db),
   };
   const webhookClient = new FetchWebhookHttpClient();
   const webhookDispatchService = new DefaultWebhookDispatchService(
@@ -71,48 +81,64 @@ export const createRuntimeContext = (env: Environment, logger: Logger): RuntimeC
     webhookClient,
     {
       timeoutMs: env.WEBHOOK_TIMEOUT_MS,
-      retryAttempts: env.WEBHOOK_RETRY_ATTEMPTS
-    }
+      retryAttempts: env.WEBHOOK_RETRY_ATTEMPTS,
+    },
   );
-  const receiveInboundMessage = new ReceiveInboundMessageUseCase(repositories, webhookDispatchService);
+  const receiveInboundMessage = new ReceiveInboundMessageUseCase(
+    repositories,
+    webhookDispatchService,
+  );
   const baileysProvider = new BaileysWhatsAppProvider(
     repositories.providerConnections,
     receiveInboundMessage,
     {
       enabled: env.ENABLE_BAILEYS,
-      authDir: env.BAILEYS_AUTH_DIR
+      authDir: env.BAILEYS_AUTH_DIR,
     },
-    logger
+    logger,
   );
   const metaProvider = new MetaWhatsAppProvider();
-  const metaProviderTemplateManagement = new MetaProviderTemplateManagementService(
-    repositories.providerConnections,
-    repositories.providerMessageTemplates
-  );
+  const metaProviderTemplateManagement =
+    new MetaProviderTemplateManagementService(
+      repositories.providerConnections,
+      repositories.providerMessageTemplates,
+    );
   const metaWebhookService = new DefaultMetaWebhookService(
     repositories.providerConnections,
     receiveInboundMessage,
     repositories.messages,
-    webhookDispatchService
+    webhookDispatchService,
   );
-  const providerRegistry = new DefaultWhatsAppProviderRegistry([baileysProvider, metaProvider]);
+  const providerRegistry = new DefaultWhatsAppProviderRegistry([
+    baileysProvider,
+    metaProvider,
+  ]);
 
   return {
     services: {
-      sendOutboundMessage: new SendOutboundMessageUseCase(repositories, providerRegistry),
+      sendOutboundMessage: new SendOutboundMessageUseCase(
+        repositories,
+        providerRegistry,
+      ),
       listConversations: new ListConversationsUseCase(repositories),
       getConversation: new GetConversationUseCase(repositories),
-      listConversationMessages: new ListConversationMessagesUseCase(repositories),
-      downloadMessageMedia: new DownloadMessageMediaUseCase(repositories, providerRegistry),
+      listConversationMessages: new ListConversationMessagesUseCase(
+        repositories,
+      ),
+      downloadMessageMedia: new DownloadMessageMediaUseCase(
+        repositories,
+        providerRegistry,
+      ),
       metaProviderTemplateManagement,
       metaWebhookService,
       baileysSessionView: baileysProvider,
       baileysDashboardAuthToken: env.BAILEYS_DASHBOARD_AUTH_TOKEN,
-      gatewaySharedSecret: env.GATEWAY_SHARED_SECRET
+      gatewaySharedSecret: env.GATEWAY_SHARED_SECRET,
+      gatewayPublicApiBearerToken: env.GATEWAY_PUBLIC_API_BEARER_TOKEN,
     },
     providerRuntimes: [baileysProvider],
     close: async () => {
       await Promise.all([baileysProvider.stop(), connection.pool.end()]);
-    }
+    },
   };
 };

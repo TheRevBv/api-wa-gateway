@@ -11,7 +11,7 @@ const start = async (): Promise<void> => {
   const runtime = createRuntimeContext(env, logger);
   const app = buildApp({
     logger,
-    dependencies: runtime.services
+    dependencies: runtime.services,
   });
 
   const shutdown = async (signal: string) => {
@@ -30,11 +30,15 @@ const start = async (): Promise<void> => {
   });
 
   try {
-    await Promise.all(runtime.providerRuntimes.map((providerRuntime) => providerRuntime.start()));
+    await Promise.all(
+      runtime.providerRuntimes.map((providerRuntime) =>
+        providerRuntime.start(),
+      ),
+    );
 
     await app.listen({
       host: env.HOST,
-      port: env.PORT
+      port: env.PORT,
     });
 
     logger.info({ host: env.HOST, port: env.PORT }, "api-wa-gateway listening");

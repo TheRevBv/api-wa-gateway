@@ -41,16 +41,18 @@ Qué hacer:
 
 ### `401 Unauthorized`
 
-Se usa hoy en el flujo inbound de Meta cuando la firma del webhook es inválida o falta.
+Se usa cuando falta o es inválido algún mecanismo de autenticación requerido.
 
 Códigos frecuentes:
 
 - `meta_webhook_signature_invalid`
+- `invalid_public_api_token`
 
 Qué hacer:
 
 - valida el secreto configurado;
-- asegúrate de firmar y verificar sobre el cuerpo crudo cuando aplique.
+- asegúrate de firmar y verificar sobre el cuerpo crudo cuando aplique;
+- si consumes la API pública, confirma el valor de `Authorization: Bearer <token>`.
 
 ### `403 Forbidden`
 
@@ -144,6 +146,7 @@ Qué hacer:
 | 400 | `validation_error` | La solicitud no cumple el esquema esperado |
 | 404 | `tenant_not_available` | El tenant no existe o no está activo |
 | 404 | `conversation_not_found` | La conversación no existe o no pertenece al tenant |
+| 401 | `invalid_public_api_token` | Falta o es inválido el bearer de la API pública |
 | 404 | `provider_connection_not_found` | No existe conexión de proveedor activa |
 | 409 | `provider_auth_required` | Baileys requiere escaneo de QR |
 | 502 | `provider_send_failed` | El proveedor rechazó el mensaje |

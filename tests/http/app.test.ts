@@ -62,13 +62,17 @@ describe("HTTP app", () => {
         metaWebhookService,
         baileysSessionView,
         baileysDashboardAuthToken: "secret-token",
-        gatewaySharedSecret: "test-shared-secret"
+        gatewaySharedSecret: "test-shared-secret",
+        gatewayPublicApiBearerToken: "public-token"
       }
     });
 
     const sendResponse = await app.inject({
       method: "POST",
       url: "/api/v1/tenants/tenant-1/messages",
+      headers: {
+        authorization: "Bearer public-token"
+      },
       payload: {
         to: "5215512345678",
         content: {
@@ -82,7 +86,10 @@ describe("HTTP app", () => {
 
     const conversationsResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/tenants/tenant-1/conversations?limit=20&offset=0"
+      url: "/api/v1/tenants/tenant-1/conversations?limit=20&offset=0",
+      headers: {
+        authorization: "Bearer public-token"
+      }
     });
 
     expect(conversationsResponse.statusCode).toBe(200);
@@ -92,7 +99,10 @@ describe("HTTP app", () => {
     const conversationId = conversationsBody.items[0]?.conversation.id as string;
     const messagesResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/tenants/tenant-1/conversations/${conversationId}/messages?limit=20&offset=0`
+      url: `/api/v1/tenants/tenant-1/conversations/${conversationId}/messages?limit=20&offset=0`,
+      headers: {
+        authorization: "Bearer public-token"
+      }
     });
 
     expect(messagesResponse.statusCode).toBe(200);
@@ -101,6 +111,9 @@ describe("HTTP app", () => {
     const invalidResponse = await app.inject({
       method: "POST",
       url: "/api/v1/tenants/tenant-1/messages",
+      headers: {
+        authorization: "Bearer public-token"
+      },
       payload: {
         to: "",
         content: {

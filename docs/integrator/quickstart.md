@@ -15,17 +15,17 @@ Esta guía está dirigida a equipos que consumirán `api-wa-gateway` desde otro 
 
 ## Importante sobre autenticación
 
-La API HTTP pública del gateway no implementa autenticación propia en esta fase.
+La API HTTP pública del gateway valida `Authorization: Bearer <token>` cuando `GATEWAY_PUBLIC_API_BEARER_TOKEN` está configurado.
 
-Eso significa que debes exponerla detrás de uno de estos controles:
+En producción, ese token es obligatorio. En desarrollo o pruebas locales puede dejarse vacío para mantener el flujo simple.
+
+Además del bearer, sigue siendo recomendable exponer el gateway detrás de controles perimetrales como:
 
 - red privada;
 - VPN;
 - reverse proxy con autenticación;
 - API gateway externo;
 - reglas de firewall por IP.
-
-No asumas que el gateway ya valida `Authorization`, `Bearer token` o `x-api-key`.
 
 ## Flujo mínimo recomendado
 
@@ -52,6 +52,7 @@ Respuesta esperada:
 
 ```bash
 curl -X POST https://gateway.midominio.com/api/v1/tenants/tenant_acme/messages \
+  -H "Authorization: Bearer <GATEWAY_PUBLIC_API_BEARER_TOKEN>" \
   -H "content-type: application/json" \
   -d '{
     "to": "5215512345678",
@@ -109,7 +110,8 @@ Respuesta esperada `201 Created`:
 ## Paso 3: listar conversaciones
 
 ```bash
-curl "https://gateway.midominio.com/api/v1/tenants/tenant_acme/conversations?limit=20&offset=0"
+curl "https://gateway.midominio.com/api/v1/tenants/tenant_acme/conversations?limit=20&offset=0" \
+  -H "Authorization: Bearer <GATEWAY_PUBLIC_API_BEARER_TOKEN>"
 ```
 
 Respuesta esperada `200 OK`:
@@ -151,7 +153,8 @@ Respuesta esperada `200 OK`:
 ## Paso 4: consultar mensajes de una conversación
 
 ```bash
-curl "https://gateway.midominio.com/api/v1/tenants/tenant_acme/conversations/cnv_01jabc123/messages?limit=50&offset=0"
+curl "https://gateway.midominio.com/api/v1/tenants/tenant_acme/conversations/cnv_01jabc123/messages?limit=50&offset=0" \
+  -H "Authorization: Bearer <GATEWAY_PUBLIC_API_BEARER_TOKEN>"
 ```
 
 ## Tipos de mensaje soportados
